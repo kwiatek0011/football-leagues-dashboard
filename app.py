@@ -2584,6 +2584,10 @@ with tab_zaleznosci:
             "Goalkeeper Saves (Avg / 90)": "Keeper_Saves_Mean",
             "Win Rate (%)": "Win_Rate",
             "Total Matches Won": "Wygrane",
+            "Box Touches Conversion (Shots/Touch)": "Strzaly_z_pola_karnego", # lub nowa kolumna
+            "Long Ball Share (%)": "Udzial_dlugich_pilek_proc",
+            "Finishing Delta (Goals - xG)": "Gole_minus_xG",
+            "Pass Dominance Balance": "Bilans_Podan_Atak",
         }
     else:
         METRIC_DB = {
@@ -2617,6 +2621,9 @@ with tab_zaleznosci:
             "Obrony Własnego Bramkarza (Śr. / Mecz)": "Keeper_Saves_Mean",
             "% Wygranych Meczów (Win Rate)": "Win_Rate",
             "Liczba Wygranych Spotkań": "Wygrane",
+            "Udział Długich Piłek (%)": "Udzial_dlugich_pilek_proc",
+            "Bilans Wykończenia (Gole - xG)": "Gole_minus_xG",
+            "Bilans Podań w Ataku": "Bilans_Podan_Atak",
         }
 
     metric_options = list(METRIC_DB.keys())
