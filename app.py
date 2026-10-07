@@ -541,6 +541,36 @@ def load_and_process_top5_leagues():
     
     return combined_matches, combined_teams
 
+
+def calculate_team_zscores(df, selected_team, metrics_dict):
+    """
+    Oblicza Z-Score dla wybranego zespołu względem całej stawki ligowej / europejskiej.
+    metrics_dict: słownik {'Wyświetlana Etykieta': 'Nazwa_Kolumny_w_DF'}
+    """
+    records = []
+    team_row = df[df["Team"] == selected_team].iloc[0]
+    
+    for label, col in metrics_dict.items():
+        if col in df.columns:
+            mean_val = df[col].mean()
+            std_val = df[col].std()
+            val = team_row[col]
+            
+            # Zabezpieczenie przed dzieleniem przez zero
+            z_score = (val - mean_val) / std_val if std_val > 0 else 0.0
+            
+            records.append({
+                "Metric": label,
+                "Value": val,
+                "Mean": mean_val,
+                "Z_Score": round(z_score, 2)
+            })
+            
+    return pd.DataFrame(records)
+
+
+
+
 def render_paper_ranking(df, title, value_col, value_header, selected_team=None, format_str="{:.2f}"):
     """Generuje minimalistyczną tabelę rankingową w stylu papierowej karty raportowej."""
     rows_html = ""
@@ -2546,6 +2576,92 @@ with tab_druzyny:
     col_map1_def, col_map2_def, col_map3_def = st.columns([0.15, 4, 0.15])
     with col_map2_def:
         st.plotly_chart(fig_pitch_def, use_container_width=True)
+
+    # =========================================================
+    # MODUŁ STATYSTYCZNY: PROFIL Z-SCORE (STANDARYZACJA)
+    # =========================================================
+    st.markdown("---")
+    st.subheader(
+        f"📊 Statistical DNA: {selected_prof_team} (Z-Score Standardization)" 
+        if selected_lang == "EN" 
+        else f"📊 Statystyczne DNA: {selected_prof_team} (Standaryzacja Z-Score)"
+    )
+    st.caption(
+        "Shows how many standard deviations (σ) the team deviates from the average (0.00 = Average, +1.50 = European Elite, -1.50 = Bottom tier)."
+        if selected_lang == "EN"
+        else "Pokazuje, o ile odchyleń standardowych (σ) zespół odstaje od średniej stawki (0.00 = Średnia, +1.50 = Elita, -1.50 = Strefa słabości)."
+    )
+
+    # Zestaw 8 kluczowych metryk taktycznych do profilu Z-Score
+    if selected_lang == "EN":
+        z_metrics = {
+            "Expected Goals (xG / 90)": "xG_na_mecz",
+            "Open Play Threat (xG OP)": "xG_OP_na_mecz",
+            "Finishing Edge (Goals - xG)": "Gole_minus_xG",
+            "Box Threat (Box Shots)": "Strzaly_z_pola_karnego",
+            "Defensive Resilience (1 / xGA)": "xGA_na_mecz",  # odwrócimy znak dla obrony
+            "Goalkeeper Impact (Prevented)": "Goals_Prevented_Mecz",
+            "Territorial Dominance (Opp Half)": "Passes_Opp_Half_Mean",
+            "Ball Possession (%)": "Posiadanie",
+            "Duels Won / 90": "Pojedynki_Wygrane"
+        }
+    else:
+        z_metrics = {
+            "Kreacja Zagrożenia (xG / mecz)": "xG_na_mecz",
+            "Atak Pozycyjny (xG Open Play)": "xG_OP_na_mecz",
+            "Skuteczność (Gole - Suma xG)": "Gole_minus_xG",
+            "Strzały z pola karnego": "Strzaly_z_pola_karnego",
+            "Szczelność Defensywy (1 / xGA)": "xGA_na_mecz",
+            "Interwencje Bramkarza (Prevented)": "Goals_Prevented_Mecz",
+            "Gra na połowie rywala": "Passes_Opp_Half_Mean",
+            "Posiadanie Piłki (%)": "Posiadanie",
+            "Wygrane Pojedynki": "Pojedynki_Wygrane"
+        }
+
+    z_df = calculate_team_zscores(team_stats, selected_prof_team, z_metrics)
+
+    # Odwracamy Z-Score dla dopuszczonego xGA: mniej xGA = lepszy wynik (w prawo)
+    for idx, row in z_df.iterrows():
+        if "xGA" in row["Metric"]:
+            z_df.at[idx, "Z_Score"] = -row["Z_Score"]
+
+    # Kolorowanie słupków: zielony dla atutów, czerwony dla mankamentów
+    z_colors = ["#10B981" if z >= 0 else "#EF4444" for z in z_df["Z_Score"]]
+
+    fig_z = go.Figure()
+    fig_z.add_trace(go.Bar(
+        x=z_df["Z_Score"],
+        y=z_df["Metric"],
+        orientation='h',
+        marker=dict(color=z_colors, line=dict(color="#0F172A", width=0.8)),
+        text=[f"{z:+.2f}σ" for z in z_df["Z_Score"]],
+        textposition="outside",
+        textfont=dict(size=11, color="#FFFFFF"),
+        hovertemplate="<b>%{y}</b><br>Z-Score: <b>%{x:+.2f}σ</b><extra></extra>"
+    ))
+
+    # Linie referencyjne odchylenia standardowego
+    fig_z.add_vline(x=0, line_color="#FFFFFF", line_width=1.5)
+    fig_z.add_vline(x=1.5, line_dash="dash", line_color="#10B981", line_width=1, annotation_text="Elite (+1.5σ)", annotation_position="top right")
+    fig_z.add_vline(x=-1.5, line_dash="dash", line_color="#EF4444", line_width=1, annotation_text="Weak (-1.5σ)", annotation_position="top left")
+
+    fig_z.update_layout(
+        height=480,
+        template="plotly_dark",
+        paper_bgcolor="#0E1117",
+        plot_bgcolor="#161B22",
+        xaxis=dict(
+            title="Deviation from Baseline (Z-Score in Standard Deviations σ)" if selected_lang == "EN" else "Odchylenie od średniej stawki (Z-Score w odchyleniach σ)",
+            range=[-2.8, 2.8],
+            zeroline=False,
+            showgrid=True,
+            gridcolor="#21262D"
+        ),
+        yaxis=dict(autorange="reversed"),
+        margin=dict(l=150, r=40, t=40, b=40)
+    )
+
+    st.plotly_chart(fig_z, use_container_width=True)
 
 
 
