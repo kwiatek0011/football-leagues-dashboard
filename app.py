@@ -3105,14 +3105,14 @@ with tab_zaleznosci:
         cluster_map = {cluster_id: name for cluster_id, name in zip(cluster_means.index, names_list)}
         cluster_data["Style"] = cluster_data["Cluster"].map(cluster_map)
 
-        # Wizualizacja 3D
+        # Wizualizacja 3D (Zmieniona na czytelną wersję Hover)
         fig_km = px.scatter_3d(
             cluster_data, 
             x="Posiadanie", 
             y="Udzial_dlugich_pilek_proc", 
             z="xG_na_mecz", 
             color="Style",
-            text="Team",
+            hover_name="Team",  # Nazwa drużyny wyświetli się tylko po najechaniu myszką
             template="plotly_dark",
             height=700,
             labels={
@@ -3122,10 +3122,12 @@ with tab_zaleznosci:
             }
         )
         
+        # Formatowanie kropek i interaktywnego dymka
+        hover_template = "<b>%{hovertext}</b><br>Possession: %{x:.1f}%<br>Long Balls: %{y:.1f}%<br>xG / 90: %{z:.2f}<extra></extra>" if selected_lang == "EN" else "<b>%{hovertext}</b><br>Posiadanie: %{x:.1f}%<br>Długie piłki: %{y:.1f}%<br>xG / 90: %{z:.2f}<extra></extra>"
+
         fig_km.update_traces(
-            textposition='top center', 
-            marker=dict(size=6, line=dict(width=1, color='White')),
-            textfont=dict(size=9, color="#E2E8F0")
+            marker=dict(size=8, line=dict(width=1, color='#0E1117'), opacity=0.9), # Powiększone kropki bez stałego tekstu
+            hovertemplate=hover_template
         )
         
         fig_km.update_layout(
