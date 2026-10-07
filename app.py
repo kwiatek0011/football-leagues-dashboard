@@ -1092,11 +1092,10 @@ with tab_ogolne:
         col_t1, col_t2 = st.columns(2)
         with col_t1:
             title_real = ("Real Standings" if selected_lang == "EN" else "Tabela Realna") + (f" ({len(tab_real)})" if show_all else " (Top 20)")
-            components.html(render_dark_table_html(tab_real, title_real, is_xg=False, lang=selected_lang), height=620, scrolling=True if show_all else False)
+            components.html(render_dark_table_html(tab_real, title_real, is_xg=False), height=620, scrolling=True if show_all else False)
         with col_t2:
             title_xg = ("Expected Goals (xG) Table" if selected_lang == "EN" else "Tabela xG") + (f" ({len(tab_xg_comp)})" if show_all else " (Top 20)")
-            components.html(render_dark_table_html(tab_xg_comp, title_xg, is_xg=True, lang=selected_lang), height=620, scrolling=True if show_all else False)
-
+            components.html(render_dark_table_html(tab_xg_comp, title_xg, is_xg=True), height=620, scrolling=True if show_all else False)
 
 
     # 2. Widok: Dom vs Wyjazd
