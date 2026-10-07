@@ -3068,4 +3068,79 @@ with tab_zaleznosci:
         xaxis=dict(tickangle=-45)
     )
     
-    st.plotly_chart(fig_hm, use_container_width=True)        
+    st.plotly_chart(fig_hm, use_container_width=True)
+
+
+    # =========================================================
+    # DODATEK: KLASYFIKACJA STYLÓW GRY (K-MEANS CLUSTERING)
+    # =========================================================
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+
+    st.markdown("---")
+    st.subheader("Tactical Style Classification (K-Means)" if selected_lang == "EN" else "Klasyfikacja Stylów Gry (K-Means Clustering)")
+    st.caption("AI-driven clustering of teams into 4 tactical profiles based on Ball Possession, Long Balls, and xG generation." if selected_lang == "EN" else "Algorytm AI grupuje drużyny w 4 profile taktyczne na podstawie Posiadania Piłki, Długich Podań i kreacji xG.")
+
+    # Wybór cech do modelu K-Means
+    features = ["Posiadanie", "Udzial_dlugich_pilek_proc", "xG_na_mecz"]
+    cluster_data = team_stats[["Team"] + features].copy().dropna()
+
+    if len(cluster_data) >= 4:  # Bezpieczeństwo - potrzebujemy min 4 drużyn do klastrowania
+        # Standaryzacja danych (K-Means jest wrażliwy na skalę)
+        scaler = StandardScaler()
+        scaled_features = scaler.fit_transform(cluster_data[features])
+
+        # Trenowanie modelu
+        kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
+        cluster_data["Cluster"] = kmeans.fit_predict(scaled_features)
+
+        # Mapowanie Klastrów (nadanie im roboczych nazw na podstawie posiadania)
+        cluster_means = cluster_data.groupby("Cluster")["Posiadanie"].mean().sort_values()
+        
+        # Tworzymy mapę w zależności od posiadania (od najniższego do najwyższego)
+        style_names_en = ["Low Block / Direct", "Counter-Attacking", "Balanced / Transitional", "Possession Dominators"]
+        style_names_pl = ["Niski Blok / Gra Bezpośrednia", "Kontratak", "Zrównoważeni / Faza Przejściowa", "Dominatorzy (Tiki-Taka)"]
+        names_list = style_names_en if selected_lang == "EN" else style_names_pl
+        
+        cluster_map = {cluster_id: name for cluster_id, name in zip(cluster_means.index, names_list)}
+        cluster_data["Style"] = cluster_data["Cluster"].map(cluster_map)
+
+        # Wizualizacja 3D
+        fig_km = px.scatter_3d(
+            cluster_data, 
+            x="Posiadanie", 
+            y="Udzial_dlugich_pilek_proc", 
+            z="xG_na_mecz", 
+            color="Style",
+            text="Team",
+            template="plotly_dark",
+            height=700,
+            labels={
+                "Posiadanie": "Possession %" if selected_lang == "EN" else "Posiadanie %",
+                "Udzial_dlugich_pilek_proc": "Long Balls %" if selected_lang == "EN" else "Długie Piłki %",
+                "xG_na_mecz": "xG / 90"
+            }
+        )
+        
+        fig_km.update_traces(
+            textposition='top center', 
+            marker=dict(size=6, line=dict(width=1, color='White')),
+            textfont=dict(size=9, color="#E2E8F0")
+        )
+        
+        fig_km.update_layout(
+            paper_bgcolor="#0E1117", 
+            scene=dict(
+                xaxis=dict(backgroundcolor="#161B22", gridcolor="#21262D"),
+                yaxis=dict(backgroundcolor="#161B22", gridcolor="#21262D"),
+                zaxis=dict(backgroundcolor="#161B22", gridcolor="#21262D")
+            ),
+            legend=dict(
+                title="Tactical Profile" if selected_lang == "EN" else "Profil Taktyczny",
+                orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5
+            )
+        )
+        
+        st.plotly_chart(fig_km, use_container_width=True)
+    else:
+        st.info("Not enough data to run K-Means clustering." if selected_lang == "EN" else "Zbyt mało danych do wykonania klastrowania.")        
