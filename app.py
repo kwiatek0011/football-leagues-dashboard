@@ -1229,11 +1229,12 @@ with tab_ofensywa:
     elif ofensywa_widok == t("att_opt10"):
         st.subheader("Finishing Over/Underperformance (Goals - xG)" if selected_lang == "EN" else "Przestrzelone okazje czy genialni napastnicy? (Zdobyte bramki - Suma xG)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Gole_minus_xG", title_chart="Finishing Overperformance (Gole - xG)",
+            df=team_stats, col_name="Gole_minus_xG", title_chart="Finishing Overperformance (Goals - xG)",
             title_paper="Goals - xG Rankings" if selected_lang == "EN" else "Gole - xG Rankings",
             value_header="Goals - xG" if selected_lang == "EN" else "Gole - xG",
             color_scale="RdYlGn", sort_asc=False
         )
+
 
     # 11. Box Shots
     elif ofensywa_widok == t("att_opt11"):
@@ -1252,6 +1253,8 @@ with tab_ofensywa:
             title_paper="Shots Outside Box Rankings", value_header="Outside Shots / 90" if selected_lang == "EN" else "Strzały z dystansu / 90",
             color_scale="Purples", sort_asc=False
         )
+
+        
 
     # 13. Rozkład xG: Open Play vs Set Play
     elif ofensywa_widok == t("att_opt13"):
@@ -2753,4 +2756,4 @@ with tab_zaleznosci:
                 f"* **Czyste konto:** W meczach bez straty bramki drużyna wygrała **{cs_row['Wygrane']} z {cs_row['Mecze']}** spotkań (**{cs_row['Szansa_Wygranej']:.0f}%** skuteczności).\n"
                 f"* **Wymóg strzelecki:** Przy zdobyciu dokładnie 1 gola zespół wygrał **{g1_row['Wygrane']} z {g1_row['Mecze']}** meczów (**{g1_row['Szansa_Wygranej']:.0f}%**), "
                 f"podczas gdy strzelenie 2 bramek dało wygraną w **{g2_row['Wygrane']} z {g2_row['Mecze']}** przypadków (**{g2_row['Szansa_Wygranej']:.0f}%**)."
-            )
+            ) 
