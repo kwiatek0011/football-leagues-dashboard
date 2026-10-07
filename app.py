@@ -1075,15 +1075,17 @@ with tab_ogolne:
         tab_xg_comp_full = compute_custom_table(matches_df, is_xg=True)
         
         # Przełącznik widoku: Top 20 vs Cała tabela (przydatne zwłaszcza przy Top 5 Leagues)
+        # Przełącznik widoku: Top 20 vs Cała tabela
         scope_opts = ["Top 20", "Pełna Tabela (Wszystkie zespoły)"] if selected_lang == "PL" else ["Top 20", "Full Standings (All Teams)"]
-        selected_scope = st.segmented_control(
+        selected_scope = st.radio(
             "Zakres tabeli:" if selected_lang == "PL" else "Standings Scope:",
             scope_opts,
-            default=scope_opts[0],
-            key="seg_table_scope"
+            index=0,
+            horizontal=True,
+            key="radio_table_scope"
         )
         
-        show_all = "Pełna" in selected_scope or "Full" in selected_scope
+        show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
         tab_real = tab_real_full if show_all else tab_real_full.head(20)
         tab_xg_comp = tab_xg_comp_full if show_all else tab_xg_comp_full.head(20)
         
