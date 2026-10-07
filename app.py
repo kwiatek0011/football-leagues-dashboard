@@ -763,10 +763,27 @@ def compute_custom_table(matches_subset, is_xg=False):
     components.html(html_code, height=720, scrolling=False)
 
 def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_header, color_scale="Greens", sort_asc=False):
-    """Tworzy zsynchronizowany widok 2-kolumnowy wspierający ujemne wartości."""
-    sorted_df = df.sort_values(by=col_name, ascending=sort_asc).copy().reset_index(drop=True)
-    avg_val = sorted_df[col_name].mean()
+    """Tworzy zsynchronizowany widok 2-kolumnowy wspierający ujemne wartości oraz dynamiczny zakres (Top 20 vs Całość)."""
+    lang = st.session_state.get("selected_lang", "PL")
     
+    # 0. Bezpieczny przełącznik zakresu (Top 20 vs Całość) z unikalnym kluczem dla każdego wykresu
+    scope_opts = ["Top 20", "Pełna Lista (Wszystkie zespoły)"] if lang == "PL" else ["Top 20", "Full List (All Teams)"]
+    selected_scope = st.radio(
+        "Zakres rankingu:" if lang == "PL" else "Ranking Scope:",
+        scope_opts,
+        index=0,
+        horizontal=True,
+        key=f"scope_radio_{col_name}"
+    )
+    show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
+
+    # Sortowanie danych
+    full_sorted_df = df.sort_values(by=col_name, ascending=sort_asc).copy().reset_index(drop=True)
+    avg_val = full_sorted_df[col_name].mean()
+    
+    # Wybór wierszy do wyświetlenia
+    sorted_df = full_sorted_df if show_all else full_sorted_df.head(20)
+
     # 1. Wykres słupkowy
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -774,7 +791,7 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
         y=sorted_df["Team"],
         orientation='h',
         text=[
-            f"{v:+.2f}" if ("Gole - xG" in value_header or "Gole - xGA" in value_header)
+            f"{v:+.2f}" if ("Gole - xG" in value_header or "Gole - xGA" in value_header or "Goals - xG" in value_header)
             else (f"{v:.3f}" if ("strzał" in value_header.lower() or "shot" in value_header.lower()) else f"{v:.2f}")
             for v in sorted_df[col_name]
         ],
@@ -791,32 +808,34 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
     
     fig.add_vline(
         x=avg_val, line_dash="dash", line_color="#475569", line_width=1.2,
-        annotation_text=f"Średnia: {avg_val:.2f}", 
+        annotation_text=f"Średnia / Avg: {avg_val:.2f}", 
         annotation_position="bottom right" if avg_val >= 0 else "bottom left",
         annotation_font=dict(size=10, color="#475569")
     )
     
-    # Skalowanie osi X (aby obsługiwała ujemne słupki)
     x_min, x_max = sorted_df[col_name].min(), sorted_df[col_name].max()
     x_range = [x_min * 1.3 if x_min < 0 else 0, x_max * 1.25 if x_max > 0 else 0]
     
+    # Dynamiczna wysokość wykresu w zależności od liczby drużyn
+    plot_height = 620 if not show_all else max(620, len(sorted_df) * 26)
+
     fig.update_layout(
-        height=620,
+        height=plot_height,
         template="simple_white",
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#F8FAFC",
         title=dict(
-            text=f"<b>{title_chart}</b>",
+            text=f"<b>{title_chart}</b>" + (f" ({len(sorted_df)})" if show_all else " (Top 20)"),
             x=0.04,
-            y=0.96,
-            font=dict(size=16, color="#0F172A")   # <-- Wyraźny ciemny tytuł u góry
+            y=0.98 if show_all else 0.96,
+            font=dict(size=16, color="#0F172A")
         ),
         xaxis=dict(
             title=dict(
                 text=f"<b>{value_header}</b>",
-                font=dict(size=13, color="#0F172A")  # <-- Wyraźny, ciemny podpis dolny
+                font=dict(size=13, color="#0F172A")
             ),
-            tickfont=dict(size=11, color="#0F172A", family="Arial Black, sans-serif"), # <-- Wyraźne liczby na dole
+            tickfont=dict(size=11, color="#0F172A", family="Arial Black, sans-serif"),
             showgrid=True,
             gridcolor="#CBD5E1",
             zeroline=True,
@@ -828,12 +847,12 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
         ),
         yaxis=dict(
             autorange="reversed",
-            tickfont=dict(size=11, color="#0F172A", family="Arial, sans-serif")
+            tickfont=dict(size=10.5, color="#0F172A", family="Arial, sans-serif")
         ),
         margin=dict(l=120, r=40, t=50, b=50)
     )
     
-    # 2. Generowanie ciemnej tabeli HTML
+    # 2. Generowanie ciemnej tabeli HTML z paskiem przewijania
     rows_html = ""
     for idx, row in sorted_df.iterrows():
         rank = idx + 1
@@ -841,8 +860,7 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
         val = row[col_name]
         matches = int(row["Mecze"]) if "Mecze" in row else len(sorted_df)
         
-        # Kolorowanie tylko dla Gole - xG
-        if "Gole - xG" in value_header:
+        if "Gole - xG" in value_header or "Goals - xG" in value_header:
             val_str = f"{val:+.2f}"
             val_color = "#10B981" if val > 0 else ("#EF4444" if val < 0 else "#FFFFFF")
         else:
@@ -858,15 +876,18 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
         </tr>
         """
         
+    th_bar_team = "Team" if lang == "EN" else "Drużyna"
+    th_bar_m = "MP" if lang == "EN" else "M"
+
     table_html = f"""
-    <div style="background-color: #1a1d21; border: 1px solid #2d333b; border-radius: 6px; padding: 14px 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div style="background-color: #1a1d21; border: 1px solid #2d333b; border-radius: 6px; padding: 14px 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-height: {plot_height - 20}px; overflow-y: auto;">
         <div style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 8px;">{title_paper}</div>
         <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.2;">
             <thead>
                 <tr style="border-bottom: 2px solid #3b434e; color: #94A3B8; font-size: 11.5px; height: 26px;">
                     <th style="width: 28px; text-align: left;">#</th>
-                    <th style="text-align: left;">Drużyna</th>
-                    <th style="width: 35px; text-align: center;">M</th>
+                    <th style="text-align: left;">{th_bar_team}</th>
+                    <th style="width: 35px; text-align: center;">{th_bar_m}</th>
                     <th style="width: 65px; text-align: right;">{value_header}</th>
                 </tr>
             </thead>
@@ -881,7 +902,7 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
     with col_l:
         st.plotly_chart(fig, use_container_width=True)
     with col_r:
-        components.html(table_html, height=620, scrolling=False)
+        components.html(table_html, height=plot_height, scrolling=True if show_all else False)
 
 # =========================================================================
 # WYBÓR LIGI I DYNAMICZNE WCZYTANIE DANYCH
