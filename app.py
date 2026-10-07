@@ -621,7 +621,7 @@ def render_dark_table_html(df, title, is_xg=False):
         """
         
     return f"""
-    <div style="background-color: #1a1d21; border: 1px solid #2d333b; border-radius: 6px; padding: 14px 18px; margin: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+    <div style="background-color: #1a1d21; border: 1px solid #2d333b; border-radius: 6px; padding: 14px 18px; margin: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-height: 570px; overflow-y: auto;">
         <div style="font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px;">{title}</div>
         <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.2;">
             <thead>
@@ -1069,19 +1069,31 @@ with tab_ogolne:
     st.markdown("---")
 
     # 1. Widok: Tabela Realna vs Tabela xG
+    # 1. Widok: Tabela Realna vs Tabela xG
     if ogolne_widok == t("gen_opt1"):
-        tab_real = compute_custom_table(matches_df, is_xg=False)
-        tab_xg_comp = compute_custom_table(matches_df, is_xg=True)
+        tab_real_full = compute_custom_table(matches_df, is_xg=False)
+        tab_xg_comp_full = compute_custom_table(matches_df, is_xg=True)
+        
+        # Przełącznik widoku: Top 20 vs Cała tabela (przydatne zwłaszcza przy Top 5 Leagues)
+        scope_opts = ["Top 20", "Pełna Tabela (Wszystkie zespoły)"] if selected_lang == "PL" else ["Top 20", "Full Standings (All Teams)"]
+        selected_scope = st.segmented_control(
+            "Zakres tabeli:" if selected_lang == "PL" else "Standings Scope:",
+            scope_opts,
+            default=scope_opts[0],
+            key="seg_table_scope"
+        )
+        
+        show_all = "Pełna" in selected_scope or "Full" in selected_scope
+        tab_real = tab_real_full if show_all else tab_real_full.head(20)
+        tab_xg_comp = tab_xg_comp_full if show_all else tab_xg_comp_full.head(20)
         
         col_t1, col_t2 = st.columns(2)
         with col_t1:
-            title_real = "Real Standings" if selected_lang == "EN" else "Tabela Realna"
-            html_t1 = render_dark_table_html(tab_real, title_real, is_xg=False)
-            components.html(html_t1, height=590, scrolling=False)
+            title_real = ("Real Standings" if selected_lang == "EN" else "Tabela Realna") + (f" ({len(tab_real)})" if show_all else " (Top 20)")
+            components.html(render_dark_table_html(tab_real, title_real, is_xg=False, lang=selected_lang), height=620, scrolling=True if show_all else False)
         with col_t2:
-            title_xg = "Expected Goals (xG) Table" if selected_lang == "EN" else "Tabela xG"
-            html_t2 = render_dark_table_html(tab_xg_comp, title_xg, is_xg=True)
-            components.html(html_t2, height=590, scrolling=False)
+            title_xg = ("Expected Goals (xG) Table" if selected_lang == "EN" else "Tabela xG") + (f" ({len(tab_xg_comp)})" if show_all else " (Top 20)")
+            components.html(render_dark_table_html(tab_xg_comp, title_xg, is_xg=True, lang=selected_lang), height=620, scrolling=True if show_all else False)
 
     # 2. Widok: Dom vs Wyjazd
     elif ogolne_widok == t("gen_opt2"):
