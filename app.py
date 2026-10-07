@@ -500,6 +500,11 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
     team_stats["Podania_rywala_na_gola"] = team_stats.apply(
         lambda r: round(r["Passes_Total_Against_Mean"] / r["Gole_stracone_na_mecz"], 1) if r["Gole_stracone_na_mecz"] > 0 else 0.0, axis=1
     )
+
+    # Nowa metryka: ile kontaktów w polu karnym przypada na 1 oddany strzał
+    team_stats["Kontakty_na_strzal_box"] = team_stats.apply(
+        lambda r: round(r["Box_Touches_Mean"] / r["Strzaly_z_pola_karnego"], 2) if r["Strzaly_z_pola_karnego"] > 0 else 0.0, axis=1
+    )
     
     return matches_df, team_stats
 
