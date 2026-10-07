@@ -528,16 +528,37 @@ def render_paper_ranking(df, title, value_col, value_header, selected_team=None,
         )
 def render_dark_table_html(df, title, is_xg=False):
     """Renderuje kompaktową tabelę w ciemnym stylu bez podświetleń."""
-    header_cols = """
+    lang = st.session_state.get("selected_lang", "PL")
+    
+    if lang == "EN":
+        th_team = "Team"
+        th_m = "MP"
+        th_w = "xW" if is_xg else "W"
+        th_d = "xD" if is_xg else "D"
+        th_l = "xL" if is_xg else "L"
+        th_goals = "xG" if is_xg else "Goals"
+        th_diff = "xGD" if is_xg else "GD"
+        th_pts = "xPts" if is_xg else "Pts"
+    else:
+        th_team = "Drużyna"
+        th_m = "M"
+        th_w = "xZ" if is_xg else "Z"
+        th_d = "xR" if is_xg else "R"
+        th_l = "xP" if is_xg else "P"
+        th_goals = "xG" if is_xg else "Bramki"
+        th_diff = "Bilans"
+        th_pts = "xPkt" if is_xg else "Pkt"
+
+    header_cols = f"""
         <th style="width: 24px; text-align: left;">#</th>
-        <th style="text-align: left; width: 140px;">Drużyna</th>
-        <th style="width: 22px; text-align: center;">M</th>
-        <th style="width: 22px; text-align: center;">""" + ("xZ" if is_xg else "Z") + """</th>
-        <th style="width: 22px; text-align: center;">""" + ("xR" if is_xg else "R") + """</th>
-        <th style="width: 22px; text-align: center;">""" + ("xP" if is_xg else "P") + """</th>
-        <th style="width: 50px; text-align: center;">""" + ("xG" if is_xg else "Bramki") + """</th>
-        <th style="width: 35px; text-align: center;">Bilans</th>
-        <th style="width: 32px; text-align: right;">""" + ("xPkt" if is_xg else "Pkt") + """</th>
+        <th style="text-align: left; width: 140px;">{th_team}</th>
+        <th style="width: 22px; text-align: center;">{th_m}</th>
+        <th style="width: 22px; text-align: center;">{th_w}</th>
+        <th style="width: 22px; text-align: center;">{th_d}</th>
+        <th style="width: 22px; text-align: center;">{th_l}</th>
+        <th style="width: 50px; text-align: center;">{th_goals}</th>
+        <th style="width: 35px; text-align: center;">{th_diff}</th>
+        <th style="width: 32px; text-align: right;">{th_pts}</th>
     """
     
     rows_html = ""
@@ -565,6 +586,22 @@ def render_dark_table_html(df, title, is_xg=False):
             <td style="font-weight: 700; color: #FFFFFF; text-align: right;">{pkt}</td>
         </tr>
         """
+        
+    return f"""
+    <div style="background-color: #1a1d21; border: 1px solid #2d333b; border-radius: 6px; padding: 14px 18px; margin: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="font-size: 16px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px;">{title}</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.2;">
+            <thead>
+                <tr style="border-bottom: 2px solid #3b434e; color: #94A3B8; font-size: 11.5px; height: 26px;">
+                    {header_cols}
+                </tr>
+            </thead>
+            <tbody>
+                {rows_html}
+            </tbody>
+        </table>
+    </div>
+    """
         
     return f"""
     <div style="background-color: #1a1d21; border: 1px solid #2d333b; border-radius: 6px; padding: 14px 18px; margin: 4px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
