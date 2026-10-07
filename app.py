@@ -503,6 +503,39 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
     
     return matches_df, team_stats
 
+@st.cache_data
+def load_and_process_top5_leagues():
+    """Wczytuje i scala dane meczowe ze wszystkich lig Top 5 (bez Ekstraklasy)."""
+    top5_files = [
+        "Premier League 2026-2027.xlsx",
+        "La Liga 26-27.xlsx",
+        "Serie A 26-27.xlsx",
+        "Bundesliga 26-27.xlsx",
+        "Ligue 1 26-27.xlsx",
+    ]
+    all_matches = []
+    all_teams = []
+    
+    for f in top5_files:
+        try:
+            m_df, t_df = load_and_process_team_data(f)
+            all_matches.append(m_df)
+            all_teams.append(t_df)
+        except Exception:
+            # Zabezpieczenie na wypadek literówki w nazwie któregoś pliku
+            continue
+            
+    combined_matches = pd.concat(all_matches, ignore_index=True)
+    combined_teams = pd.concat(all_teams, ignore_index=True)
+    
+    # Przeliczenie rankingów / sortowania dla połączonej puli drużyn
+    combined_teams = combined_teams.sort_values(
+        by=["Punkty", "Bilans_Bramkowy", "Gole_Strzelone"], 
+        ascending=False
+    ).reset_index(drop=True)
+    
+    return combined_matches, combined_teams
+
 def render_paper_ranking(df, title, value_col, value_header, selected_team=None, format_str="{:.2f}"):
     """Generuje minimalistyczną tabelę rankingową w stylu papierowej karty raportowej."""
     rows_html = ""
@@ -877,8 +910,18 @@ LEAGUES_CONFIG = {
     "Ligue 1": {
         "file": "Ligue 1 26-27.xlsx",
         "title": "Ligue 1 - Zaawansowany Dashboard Analityczny"
-    }
+    },
+
+    " Top 5 Leagues (Europe)": {
+        "file": "TOP5",  # Znacznik informujący o trybie połączonym
+        "title": " Top 5 Leagues - Zaawansowany Dashboard Analityczny"
+    },
+
+
+
+    
 }
+
 
 # Inicjalizacja języka w sesji, jeśli jeszcze nie istnieje
 if "selected_lang" not in st.session_state:
@@ -937,8 +980,11 @@ with col_league_sel:
 
 current_league = LEAGUES_CONFIG[selected_league_name]
 
-# 2. Wczytanie danych wybranej ligi
-matches_df, team_stats = load_and_process_team_data(current_league["file"])
+# 2. Wczytanie danych wybranej ligi (lub scalonej bazy Top 5)
+if current_league["file"] == "TOP5":
+    matches_df, team_stats = load_and_process_top5_leagues()
+else:
+    matches_df, team_stats = load_and_process_team_data(current_league["file"])
 
 # 3. Dynamiczny nagłówek i podtytuł (PL / EN)
 league_pure_title = current_league["title"].replace(" - Zaawansowany Dashboard Analityczny", "").strip()
