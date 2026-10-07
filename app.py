@@ -1095,6 +1095,8 @@ with tab_ogolne:
             title_xg = ("Expected Goals (xG) Table" if selected_lang == "EN" else "Tabela xG") + (f" ({len(tab_xg_comp)})" if show_all else " (Top 20)")
             components.html(render_dark_table_html(tab_xg_comp, title_xg, is_xg=True, lang=selected_lang), height=620, scrolling=True if show_all else False)
 
+
+
     # 2. Widok: Dom vs Wyjazd
     elif ogolne_widok == t("gen_opt2"):
         home_matches = matches_df[matches_df["Venue"] == "Home"]
