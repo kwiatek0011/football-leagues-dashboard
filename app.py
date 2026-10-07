@@ -3004,3 +3004,68 @@ with tab_zaleznosci:
                 f"* **Wymóg strzelecki:** Przy zdobyciu dokładnie 1 gola zespół wygrał **{g1_row['Wygrane']} z {g1_row['Mecze']}** meczów (**{g1_row['Szansa_Wygranej']:.0f}%**), "
                 f"podczas gdy strzelenie 2 bramek dało wygraną w **{g2_row['Wygrane']} z {g2_row['Mecze']}** przypadków (**{g2_row['Szansa_Wygranej']:.0f}%**)."
             ) 
+
+        # =========================================================
+    # DODATEK: GLOBALNA MACIERZ KORELACJI (HEATMAP)
+    # =========================================================
+    st.markdown("---")
+    st.subheader("Global Correlation Matrix (Heatmap)" if selected_lang == "EN" else "Globalna Macierz Korelacji (Pearson)")
+    st.caption(
+        "Displays linear correlation coefficients (-1 to 1) between key tactical metrics." 
+        if selected_lang == "EN" 
+        else "Tabela współczynników korelacji liniowej Pearsona (-1 do 1) dla kluczowych metryk. Czerwień to korelacja dodatnia, błękit to korelacja ujemna."
+    )
+
+    if selected_lang == "EN":
+        heat_metrics = {
+            "Points": "Punkty",
+            "Goals Scored": "Gole_na_mecz",
+            "Goals Conceded": "Gole_stracone_na_mecz",
+            "Created xG": "xG_na_mecz",
+            "Conceded xGA": "xGA_na_mecz",
+            "Possession %": "Posiadanie",
+            "Passes / 90": "Podania_ogolem",
+            "Box Shots": "Strzaly_z_pola_karnego",
+            "Long Balls": "Long_Balls_Mean",
+            "Duels Won": "Pojedynki_Wygrane"
+        }
+    else:
+        heat_metrics = {
+            "Punkty": "Punkty",
+            "Gole Zdobyte": "Gole_na_mecz",
+            "Gole Stracone": "Gole_stracone_na_mecz",
+            "xG Wykreowane": "xG_na_mecz",
+            "xGA Dopuszczone": "xGA_na_mecz",
+            "Posiadanie %": "Posiadanie",
+            "Podania / 90": "Podania_ogolem",
+            "Strz. z Szesnastki": "Strzaly_z_pola_karnego",
+            "Długie Piłki": "Long_Balls_Mean",
+            "Wygrane Pojedynki": "Pojedynki_Wygrane"
+        }
+
+    # Wyciągamy tylko wybrane kolumny z team_stats
+    df_heat = team_stats[list(heat_metrics.values())].copy()
+    df_heat.columns = list(heat_metrics.keys())
+    
+    # Obliczamy macierz korelacji
+    corr_matrix = df_heat.corr()
+
+    # Rysujemy mapę cieplną (Heatmap)
+    fig_hm = px.imshow(
+        corr_matrix, 
+        text_auto=".2f", 
+        aspect="auto", 
+        color_continuous_scale="RdBu_r", 
+        zmin=-1, zmax=1,
+        template="plotly_dark"
+    )
+    
+    fig_hm.update_layout(
+        height=700,
+        paper_bgcolor="#0E1117", 
+        plot_bgcolor="#161B22",
+        margin=dict(l=150, r=40, t=50, b=150),
+        xaxis=dict(tickangle=-45)
+    )
+    
+    st.plotly_chart(fig_hm, use_container_width=True)        
