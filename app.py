@@ -2889,43 +2889,91 @@ with tab_h2h:
     </div>
     """
 
-    col_h2h_table, col_h2h_chart = st.columns([1.1, 1.2])
+    col_h2h_table, col_h2h_chart = st.columns([1.05, 1.35])
 
     with col_h2h_table:
-        components.html(card_h2h_html, height=580, scrolling=False)
+        components.html(card_h2h_html, height=590, scrolling=False)
 
     with col_h2h_chart:
+        # Predefiniowane grupy metryk, aby nie mieszać skali (np. podania z golami)
+        cat_options = [
+            "Wszystkie metryki" if selected_lang == "PL" else "All Metrics",
+            "Gole i Jakość Szans (xG, xGA, xGOT)" if selected_lang == "PL" else "Goals & Chances (xG, xGA, xGOT)",
+            "Dystrybucja i Posiadanie Piłki" if selected_lang == "PL" else "Passing & Possession",
+            "Własny wybór (Personalizowany)" if selected_lang == "PL" else "Custom Selection"
+        ]
+        
+        selected_cat = st.selectbox(
+            "Zakres metryk na wykresie:" if selected_lang == "PL" else "Chart Metric Scope:",
+            cat_options,
+            index=1,  # Domyślnie 'Gole i Jakość Szans' - idealna, spójna skala 0-3
+            key="sb_h2h_chart_scope"
+        )
+        
+        # Filtrowanie metryk do wykresu
+        if "Gole" in selected_cat or "Goals" in selected_cat:
+            filtered_labels = [m[0] for m in h2h_metrics if "Podania" not in m[0] and "Passes" not in m[0] and "Posiadanie" not in m[0] and "Possession" not in m[0]]
+        elif "Dystrybucja" in selected_cat or "Passing" in selected_cat:
+            filtered_labels = [m[0] for m in h2h_metrics if "Podania" in m[0] or "Passes" in m[0] or "Posiadanie" in m[0] or "Possession" in m[0]]
+        elif "Własny" in selected_cat or "Custom" in selected_cat:
+            filtered_labels = st.multiselect(
+                "Wybierz metryki do porównania:" if selected_lang == "PL" else "Select metrics to compare:",
+                options=plot_labels,
+                default=plot_labels[:4],
+                key="ms_h2h_custom_metrics"
+            )
+        else:
+            filtered_labels = plot_labels
+
+        # Przygotowanie danych po filtrze
+        chart_labels = []
+        chart_vals_a = []
+        chart_vals_b = []
+        for lbl in filtered_labels:
+            if lbl in plot_labels:
+                idx = plot_labels.index(lbl)
+                chart_labels.append(lbl)
+                chart_vals_a.append(plot_vals_a[idx])
+                chart_vals_b.append(plot_vals_b[idx])
+
+        # Rysowanie wykresu słupkowego
         fig_h2h = go.Figure()
         
         fig_h2h.add_trace(go.Bar(
-            y=plot_labels,
-            x=plot_vals_a,
+            y=chart_labels,
+            x=chart_vals_a,
             name=team_a,
             orientation='h',
             marker=dict(color="#38BDF8"),
-            text=[f"{v:.2f}" for v in plot_vals_a],
-            textposition="auto"
+            text=[f"{v:.2f}" for v in chart_vals_a],
+            textposition="outside",
+            textfont=dict(color="#FFFFFF", size=10.5)
         ))
         
         fig_h2h.add_trace(go.Bar(
-            y=plot_labels,
-            x=plot_vals_b,
+            y=chart_labels,
+            x=chart_vals_b,
             name=team_b,
             orientation='h',
             marker=dict(color="#F59E0B"),
-            text=[f"{v:.2f}" for v in plot_vals_b],
-            textposition="auto"
+            text=[f"{v:.2f}" for v in chart_vals_b],
+            textposition="outside",
+            textfont=dict(color="#FFFFFF", size=10.5)
         ))
+
+        # Dynamiczny margines osi X, aby etykiety się mieściły
+        max_val = max(chart_vals_a + chart_vals_b) if (chart_vals_a and chart_vals_b) else 5
+        x_limit = max_val * 1.22 if max_val > 0 else 5
 
         fig_h2h.update_layout(
             barmode='group',
-            height=580,
+            height=530,
             template="plotly_dark",
             paper_bgcolor="#0E1117",
             plot_bgcolor="#161B22",
-            margin=dict(l=10, r=20, t=30, b=30),
-            yaxis=dict(autorange="reversed", showticklabels=False),
-            xaxis=dict(showgrid=True, gridcolor="#21262D"),
+            margin=dict(l=190, r=30, t=20, b=20),  # Wyraźny margines po lewej na nazwy metryk
+            yaxis=dict(autorange="reversed", tickfont=dict(size=11, color="#E2E8F0")),
+            xaxis=dict(showgrid=True, gridcolor="#21262D", range=[0, x_limit]),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
         )
         st.plotly_chart(fig_h2h, use_container_width=True)
