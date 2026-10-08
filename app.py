@@ -2790,15 +2790,15 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, threshold=
         
         # Wykrywanie atutów i mankamentów Drużyny A
         if norm_za >= threshold:
-            insights_a.append((f"🔥 **{lbl}**: {val_a:.2f} *(+{za:+.1f}σ ponad ligę)*", "strength"))
+            insights_a.append((f" **{lbl}**: {val_a:.2f} *(+{za:+.1f}σ ponad ligę)*", "strength"))
         elif norm_za <= -threshold:
-            insights_a.append((f"⚠️ **{lbl}**: {val_a:.2f} *({za:+.1f}σ poniżej ligi)*", "weakness"))
+            insights_a.append((f" **{lbl}**: {val_a:.2f} *({za:+.1f}σ poniżej ligi)*", "weakness"))
             
         # Wykrywanie atutów i mankamentów Drużyny B
         if norm_zb >= threshold:
-            insights_b.append((f"🔥 **{lbl}**: {val_b:.2f} *(+{zb:+.1f}σ ponad ligę)*", "strength"))
+            insights_b.append((f" **{lbl}**: {val_b:.2f} *(+{zb:+.1f}σ ponad ligę)*", "strength"))
         elif norm_zb <= -threshold:
-            insights_b.append((f"⚠️ **{lbl}**: {val_b:.2f} *({zb:+.1f}σ poniżej ligi)*", "weakness"))
+            insights_b.append((f" **{lbl}**: {val_b:.2f} *({zb:+.1f}σ poniżej ligi)*", "weakness"))
             
         # Wykrywanie bezpośrednich dysproporcji stylu
         diff_z = norm_za - norm_zb
@@ -2810,11 +2810,11 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, threshold=
             
             if lang == "EN":
                 h2h_clashes.append(
-                    f"⚔️ **Major Disparity in {lbl}**: **{leader}** ({v_lead:.2f}) holds a clear edge over **{chaser}** ({v_chase:.2f}) [Δ {abs(diff_z):.1f}σ]."
+                    f" **Major Disparity in {lbl}**: **{leader}** ({v_lead:.2f}) holds a clear edge over **{chaser}** ({v_chase:.2f}) [Δ {abs(diff_z):.1f}σ]."
                 )
             else:
                 h2h_clashes.append(
-                    f"⚔️ **Wyraźna przewaga w: {lbl}**: **{leader}** ({v_lead:.2f}) dominuje nad **{chaser}** ({v_chase:.2f}) [Różnica: {abs(diff_z):.1f}σ]."
+                    f" **Wyraźna przewaga w: {lbl}**: **{leader}** ({v_lead:.2f}) dominuje nad **{chaser}** ({v_chase:.2f}) [Różnica: {abs(diff_z):.1f}σ]."
                 )
 
     return insights_a, insights_b, h2h_clashes
@@ -3047,7 +3047,7 @@ with tab_h2h:
         
         col_ai_head, col_ai_sens = st.columns([2.2, 1.2])
         with col_ai_head:
-            st.subheader("🧠 Automated Tactical Scouting Report (AI Insights)" if selected_lang == "EN" else "🧠 Automatyczny Raport Taktyczny AI (Analiza Anomalii i Przewag)")
+            st.subheader(" Automated Tactical Scouting Report (AI Insights)" if selected_lang == "EN" else " Automatyczny Raport Taktyczny AI (Analiza Anomalii i Przewag)")
             st.caption(
                 "Algorithmic anomaly detection based on standardized league deviations and direct match clashes."
                 if selected_lang == "EN"
@@ -3099,7 +3099,7 @@ with tab_h2h:
         col_ai_a, col_ai_b = st.columns(2)
 
         with col_ai_a:
-            st.markdown(f"#### 🔍 {team_a} vs Liga ({len(ins_a)} anomalii)")
+            st.markdown(f"####  {team_a} vs Liga ({len(ins_a)} anomalii)")
             if ins_a:
                 for text, kind in ins_a:
                     if kind == "strength":
@@ -3110,7 +3110,7 @@ with tab_h2h:
                 st.info("Brak istotnych odchyleń przy bieżącym progu czułości." if selected_lang == "PL" else "No significant deviations at current threshold.")
 
         with col_ai_b:
-            st.markdown(f"#### 🔍 {team_b} vs Liga ({len(ins_b)} anomalii)")
+            st.markdown(f"####  {team_b} vs Liga ({len(ins_b)} anomalii)")
             if ins_b:
                 for text, kind in ins_b:
                     if kind == "strength":
@@ -3121,7 +3121,7 @@ with tab_h2h:
                 st.info("Brak istotnych odchyleń przy bieżącym progu czułości." if selected_lang == "PL" else "No significant deviations at current threshold.")
 
         if clashes:
-            st.markdown(f"#### ⚡ Główne Różnice Stylistyczne w tym Meczu ({len(clashes)})" if selected_lang == "PL" else f"#### ⚡ Critical Stylistic Clashes ({len(clashes)})")
+            st.markdown(f"####  Główne Różnice Stylistyczne w tym Meczu ({len(clashes)})" if selected_lang == "PL" else f"####  Critical Stylistic Clashes ({len(clashes)})")
             for c in clashes:
                 st.warning(c)    
 
