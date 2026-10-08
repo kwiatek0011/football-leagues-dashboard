@@ -1074,12 +1074,13 @@ display_df[float_cols] = display_df[float_cols].round(2)
 display_df.columns = [col.replace("_", " ") for col in display_df.columns]
 
 # Zakładki
-tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny,tab_zaleznosci = st.tabs([
+tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h,tab_zaleznosci = st.tabs([
     t("tab_general"),
     t("tab_offense"), 
     t("tab_defense"),
     t("tab_passing"),
     t("tab_teams"),
+    t("tab_h2h"),
     t("tab_insights"),
     
 ]) 
@@ -2756,6 +2757,48 @@ with tab_druzyny:
     )
 
     st.plotly_chart(fig_z, use_container_width=True)
+
+
+# =========================================================================
+# TAB: PORÓWNANIE DRUŻYN (H2H)
+# =========================================================================
+with tab_h2h:
+    st.header(" Head-to-Head Team Comparison" if selected_lang == "EN" else " Porównanie Zespołów (Head-to-Head)")
+    st.caption(
+        "Compare two teams directly across tactical styles and key performance metrics." 
+        if selected_lang == "EN" 
+        else "Zestaw ze sobą dwa zespoły, aby bezpośrednio porównać ich profile taktyczne i kluczowe wskaźniki."
+    )
+    
+    # Pobranie alfabetycznej listy drużyn
+    team_list_h2h = sorted(team_stats["Team"].unique().tolist())
+    
+    # Rozkład na dwie kolumny (Drużyna A i Drużyna B)
+    col_h2h_1, col_h2h_2 = st.columns(2)
+    
+    with col_h2h_1:
+        team_a = st.selectbox(
+            "Select Team A:" if selected_lang == "EN" else "Wybierz Drużynę A:",
+            team_list_h2h,
+            index=0,  # Domyślnie pierwsza drużyna na liście
+            key="sb_h2h_team_a"
+        )
+        
+    with col_h2h_2:
+        team_b = st.selectbox(
+            "Select Team B:" if selected_lang == "EN" else "Wybierz Drużynę B:",
+            team_list_h2h,
+            index=1 if len(team_list_h2h) > 1 else 0,  # Domyślnie druga drużyna, żeby nie porównywać z samą sobą
+            key="sb_h2h_team_b"
+        )
+        
+    st.markdown("---")
+    
+    # Placeholder na kolejne kroki
+    if selected_lang == "EN":
+        st.info(f"Teams selected: **{team_a}** vs **{team_b}**. Ready to add Radar Charts and Bar comparisons!")
+    else:
+        st.info(f"Wybrano: **{team_a}** vs **{team_b}**. Baza jest gotowa na dodanie radarów i statystyk H2H!")
 
 
 
