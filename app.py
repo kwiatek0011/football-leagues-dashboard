@@ -2315,39 +2315,81 @@ with tab_druzyny:
         st.plotly_chart(fig, use_container_width=True)
 
     
-    # 12. Średnia Krocząca (Rolling Average)
+    # 12. Średnia Krocząca (Rolling Average) z wyborem parametrów
     elif team_view_category in [team_modules_en[11], team_modules_pl[11]]:
-        # Obliczamy 5-meczową średnią (min_periods=1 sprawia, że zaczynamy liczyć od pierwszego meczu bez luk)
-        t_matches["xG_Roll"] = t_matches["xG_For"].rolling(window=5, min_periods=1).mean()
-        t_matches["xGA_Roll"] = t_matches["xG_Against"].rolling(window=5, min_periods=1).mean()
+        col_roll_opt1, col_roll_opt2 = st.columns(2)
+        
+        # Słownik powiązań: Nazwa opcji -> (Kolumna Drużyny, Kolumna Rywala)
+        if selected_lang == "EN":
+            roll_metrics = {
+                "Expected Goals (xG)": ("xG_For", "xG_Against"),
+                "Open Play xG": ("xG_OP_For", "xG_OP_Against"),
+                "Shot Quality (xGOT)": ("xGOT_For", "xGOT_Against"),
+                "Shots Inside Box": ("Box_Shots", "Box_Shots_Against"),
+                "Accurate Long Balls": ("Long_Balls", "Long_Balls_Against"),
+                "Duels Won": ("Duels_Won", "Duels_Won_Against"),
+                "Ball Possession (%)": ("Possession", "Possession_Against_Temp") 
+            }
+        else:
+            roll_metrics = {
+                "Expected Goals (xG)": ("xG_For", "xG_Against"),
+                "xG z Gry Otwartej (Open Play)": ("xG_OP_For", "xG_OP_Against"),
+                "Jakość Strzałów (xGOT)": ("xGOT_For", "xGOT_Against"),
+                "Strzały z pola karnego": ("Box_Shots", "Box_Shots_Against"),
+                "Celne Długie Piłki": ("Long_Balls", "Long_Balls_Against"),
+                "Wygrane Pojedynki": ("Duels_Won", "Duels_Won_Against"),
+                "Posiadanie Piłki (%)": ("Possession", "Possession_Against_Temp")
+            }
+
+        with col_roll_opt1:
+            selected_roll = st.selectbox(
+                "Select Metric to Track:" if selected_lang == "EN" else "Wybierz statystykę do analizy:",
+                list(roll_metrics.keys()),
+                key="sb_roll_metric"
+            )
+        with col_roll_opt2:
+            roll_window = st.slider(
+                "Rolling Window (Matches):" if selected_lang == "EN" else "Okno uśredniania (Liczba meczów):",
+                min_value=2, max_value=10, value=5, step=1,
+                key="slider_roll_window"
+            )
+
+        col_team_m, col_opp_m = roll_metrics[selected_roll]
+        
+        # Wyliczanie posiadania rywala w locie dla konkretnego meczu
+        if selected_roll in ["Ball Possession (%)", "Posiadanie Piłki (%)"]:
+            t_matches["Possession_Against_Temp"] = 100.0 - t_matches["Possession"]
+
+        # Matematyka: wygładzona średnia krocząca na podstawie suwaka
+        t_matches["Team_Roll"] = t_matches[col_team_m].rolling(window=roll_window, min_periods=1).mean()
+        t_matches["Opp_Roll"] = t_matches[col_opp_m].rolling(window=roll_window, min_periods=1).mean()
         
         fig = go.Figure()
         
-        # Linie dla wygładzonego xG i xGA (używamy shape='spline' dla płynnych, zakrzywionych linii zamiast kanciastych skoków)
         fig.add_trace(go.Scatter(
-            x=t_matches["Kolejka"], y=t_matches["xG_Roll"], 
+            x=t_matches["Kolejka"], y=t_matches["Team_Roll"], 
             mode="lines", 
-            name="xG Created (5-Match Avg)" if selected_lang == "EN" else "Utworzone xG (Śr. z 5 meczów)",
+            name="Team (Avg)" if selected_lang == "EN" else "Własne (Średnia)",
             line=dict(color="#38BDF8", width=3.5, shape="spline"),
-            hovertemplate="<b>%{x}</b><br>Rolling xG: %{y:.2f}<extra></extra>"
+            hovertemplate="<b>%{x}</b><br>Team: %{y:.2f}<extra></extra>"
         ))
         
         fig.add_trace(go.Scatter(
-            x=t_matches["Kolejka"], y=t_matches["xGA_Roll"], 
+            x=t_matches["Kolejka"], y=t_matches["Opp_Roll"], 
             mode="lines", 
-            name="xGA Conceded (5-Match Avg)" if selected_lang == "EN" else "Dopuszczone xGA (Śr. z 5 meczów)",
+            name="Opponent (Avg)" if selected_lang == "EN" else "Rywala (Średnia)",
             line=dict(color="#EF4444", width=3.5, shape="spline"),
-            hovertemplate="<b>%{x}</b><br>Rolling xGA: %{y:.2f}<extra></extra>"
+            hovertemplate="<b>%{x}</b><br>Opponent: %{y:.2f}<extra></extra>"
         ))
         
         fig.update_layout(
             height=450, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22",
             title=dict(
-                text=f"<b>{selected_prof_team} - True Form (5-Match Rolling Average)</b>" if selected_lang == "EN" else f"<b>{selected_prof_team} - Prawdziwa Forma (5-meczowa średnia krocząca)</b>", 
+                text=f"<b>{selected_prof_team} - {selected_roll} ({roll_window}-Match Rolling Average)</b>" if selected_lang == "EN" else f"<b>{selected_prof_team} - {selected_roll} (Średnia krocząca: {roll_window} m.)</b>", 
                 font=dict(size=16, color="#FFFFFF"), x=0.03, y=0.95
             ),
             xaxis=dict(title="Matchweek" if selected_lang == "EN" else "Numer Kolejki", dtick=1, showgrid=True, gridcolor="#30363D"),
-            yaxis=dict(title="Expected Goals (Avg)" if selected_lang == "EN" else "Średnie xG", showgrid=True, gridcolor="#30363D", zeroline=False),
+            yaxis=dict(title="Average Value" if selected_lang == "EN" else "Średnia wartość", showgrid=True, gridcolor="#30363D", zeroline=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         st.plotly_chart(fig, use_container_width=True)
