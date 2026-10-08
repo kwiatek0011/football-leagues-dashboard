@@ -2819,6 +2819,126 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, threshold=
 
     return insights_a, insights_b, h2h_clashes
 
+
+    # =========================================================
+    # MODUŁ: CO NAPRAWDĘ DAJE PUNKTY TEJ DRUŻYNIE? (KEY DRIVERS)
+    # =========================================================
+    st.markdown("---")
+    st.subheader(
+        f"🎯 Key Performance Drivers: What Actually Wins Games for {selected_prof_team}?"
+        if selected_lang == "EN"
+        else f"🎯 Co Naprawdę Daje Punkty Drużynie: {selected_prof_team}?"
+    )
+    st.caption(
+        "Correlation between specific match metrics and Points gained by this team. Identifies which tactical elements are critical to their success."
+        if selected_lang == "EN"
+        else "Współczynnik korelacji pomiędzy elementami gry w meczu a zdobytymi punktami przez ten zespół. Pokazuje, co realnie napędza ich zwycięstwa."
+    )
+
+    # Pula metryk meczowych do zbadania w meczach tej drużyny
+    driver_metrics = [
+        ("Wygrane Pojedynki", "Duels Won", "Duels_Won"),
+        ("Kontakty w Szesnastce", "Box Touches", "Box_Touches"),
+        ("Strzały z Pola Karnego", "Box Shots", "Box_Shots"),
+        ("xG z Gry Otwartej", "Open Play xG", "xG_OP_For"),
+        ("xG ze SFG", "Set Play xG", "xG_SP_For"),
+        ("Podania na Połowie Rywala", "Opp Half Passes", "Passes_Opp_Half"),
+        ("Podania na Własnej Połowie", "Own Half Passes", "Passes_Own_Half"),
+        ("Posiadanie Piłki (%)", "Possession %", "Possession"),
+        ("Długie Piłki", "Long Balls", "Long_Balls"),
+        ("Rzuty Rożne", "Corners", "Corners"),
+        ("Obrony Bramkarza", "Saves", "Keeper_Saves")
+    ]
+
+    drivers_list = []
+    
+    # Liczymy korelację dla każdego parametru z punktami (Points)
+    for lbl_pl, lbl_en, col in driver_metrics:
+        if col in t_matches.columns and t_matches[col].std() > 0:
+            corr = t_matches[col].corr(t_matches["Points"])
+            if not np.isnan(corr):
+                lbl = lbl_en if selected_lang == "EN" else lbl_pl
+                drivers_list.append({
+                    "Metric": lbl,
+                    "Correlation": round(corr, 2),
+                    "AbsCorr": abs(corr)
+                })
+
+    if len(drivers_list) > 0:
+        df_drivers = pd.DataFrame(drivers_list).sort_values(by="Correlation", ascending=False).reset_index(drop=True)
+
+        col_drv_chart, col_drv_txt = st.columns([1.3, 1.0])
+
+        with col_drv_chart:
+            # Kolory: zielone dla silnie sprzyjających, szare dla neutralnych, czerwone dla metryk niekorzystnych
+            bar_colors = [
+                "#10B981" if c >= 0.3 else ("#EF4444" if c <= -0.3 else "#64748B")
+                for c in df_drivers["Correlation"]
+            ]
+
+            fig_drv = go.Figure(go.Bar(
+                y=df_drivers["Metric"],
+                x=df_drivers["Correlation"],
+                orientation='h',
+                marker=dict(color=bar_colors),
+                text=[f"{c:+.2f}" for c in df_drivers["Correlation"]],
+                textposition="outside",
+                textfont=dict(color="#FFFFFF", size=11)
+            ))
+
+            fig_drv.update_layout(
+                height=450,
+                template="plotly_dark",
+                paper_bgcolor="#0E1117",
+                plot_bgcolor="#161B22",
+                margin=dict(l=160, r=40, t=30, b=30),
+                yaxis=dict(autorange="reversed"),
+                xaxis=dict(
+                    title="Correlation with Points (-1 to +1)" if selected_lang == "EN" else "Korelacja ze zdobytymi punktami (-1 do +1)",
+                    range=[-1.0, 1.0],
+                    zeroline=True,
+                    zerolinecolor="#FFFFFF",
+                    gridcolor="#21262D"
+                )
+            )
+            st.plotly_chart(fig_drv, use_container_width=True)
+
+        with col_drv_txt:
+            top_positive = df_drivers.iloc[0]
+            bottom_metric = df_drivers.iloc[-1]
+            
+            # Wyszukujemy bezpośrednie porównanie pojedynków z podaniami
+            duels_row = df_drivers[df_drivers["Metric"].str.contains("Pojedynki|Duels")]
+            own_pass_row = df_drivers[df_drivers["Metric"].str.contains("Własnej|Own Half")]
+
+            st.markdown("#### 💡 Wnioski Taktyczne" if selected_lang == "PL" else "#### 💡 Tactical Takeaways")
+            
+            st.success(
+                f"🚀 **Główny motor napędowy:** Najsilniejszy związek z punktami ma **{top_positive['Metric']}** (r = {top_positive['Correlation']:+.2f}). Gdy ten element funkcjonuje, zespół regularnie punktuje."
+                if selected_lang == "PL"
+                else f"🚀 **Primary Success Driver:** The highest correlation with points belongs to **{top_positive['Metric']}** (r = {top_positive['Correlation']:+.2f})."
+            )
+
+            if bottom_metric["Correlation"] < 0:
+                st.warning(
+                    f"⚠️ **Pułapka stylu:** **{bottom_metric['Metric']}** ma ujemną korelację z punktami (r = {bottom_metric['Correlation']:+.2f}). Często duża liczba w tej statystyce oznacza, że mecz nie układał się po ich myśli (np. gonienie wyniku)."
+                    if selected_lang == "PL"
+                    else f"⚠️ **Style Trap:** **{bottom_metric['Metric']}** is negatively correlated with points (r = {bottom_metric['Correlation']:+.2f})."
+                )
+
+            # Bezpośrednie zestawienie z pytania: Pojedynki vs Podania na własnej połowie
+            if not duels_row.empty and not own_pass_row.empty:
+                r_d = duels_row.iloc[0]["Correlation"]
+                r_p = own_pass_row.iloc[0]["Correlation"]
+                
+                if r_d > r_p:
+                    porownanie_txt = f"Wygrane pojedynki (r = {r_d:+.2f}) są dla {selected_prof_team} **znacznie cenniejsze** niż bezpieczne klepanie na własnej połowie (r = {r_p:+.2f})."
+                else:
+                    porownanie_txt = f"Spokojne rozegranie od tyłu (r = {r_p:+.2f}) daje tej drużynie **więcej korzyści punktowych** niż bezpośrednia walka fizyczna o pojedynki (r = {r_d:+.2f})."
+                
+                st.info(f"⚖️ **Pojedynki vs Rozegranie:** {porownanie_txt}")
+    
+
 # =========================================================================
 # TAB: PORÓWNANIE DRUŻYN (H2H)
 # =========================================================================
