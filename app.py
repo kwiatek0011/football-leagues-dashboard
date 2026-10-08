@@ -3039,7 +3039,6 @@ with tab_h2h:
         st.plotly_chart(fig_h2h, use_container_width=True)
 
 
-
         # =========================================================
     # MODUŁ: WYKRES RADAROWY H2H (SPIDER CHART - PERCENTYLE)
     # =========================================================
@@ -3071,10 +3070,8 @@ with tab_h2h:
         lbl = en_name if selected_lang == "EN" else pl_name
         radar_categories.append(lbl)
         
-        # Wyliczanie rangi percentylowej w lidze (0 do 100)
         series = team_stats[col].rank(pct=True) * 100.0
         
-        # Inwersja dla obrony (im niższe dopuszczone xGA, tym wyższy percentyl)
         if lower_is_better:
             series = 100.0 - series
             
@@ -3084,14 +3081,12 @@ with tab_h2h:
         pct_a.append(round(series.loc[team_a_idx], 1))
         pct_b.append(round(series.loc[team_b_idx], 1))
 
-    # Zamknięcie obwodu wielokąta w radarze (pierwszy punkt powtórzony na końcu)
     radar_cats_closed = radar_categories + [radar_categories[0]]
     pct_a_closed = pct_a + [pct_a[0]]
     pct_b_closed = pct_b + [pct_b[0]]
 
     fig_radar = go.Figure()
 
-    # Zarys Drużyny A
     fig_radar.add_trace(go.Scatterpolar(
         r=pct_a_closed,
         theta=radar_cats_closed,
@@ -3102,7 +3097,6 @@ with tab_h2h:
         hovertemplate="<b>%{theta}</b><br>" + f"{team_a}: " + "<b>%{r:.1f}th percentile</b><extra></extra>"
     ))
 
-    # Zarys Drużyny B
     fig_radar.add_trace(go.Scatterpolar(
         r=pct_b_closed,
         theta=radar_cats_closed,
@@ -3150,7 +3144,7 @@ with tab_h2h:
     # =========================================================
         # AUTOMATYCZNY SILNIK RAPORTOWY AI (TACTICAL INSIGHTS)
         # =========================================================
-        
+        st.markdown("---")
         
         col_ai_head, col_ai_sens = st.columns([2.2, 1.2])
         with col_ai_head:
