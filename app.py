@@ -3043,7 +3043,7 @@ with tab_h2h:
         # AUTOMATYCZNY SILNIK RAPORTOWY AI (TACTICAL INSIGHTS)
         # =========================================================
         st.markdown("---")
-        st.subheader("🧠 Automated Tactical Scouting Report (AI Insights)" if selected_lang == "EN" else "🧠 Automatyczny Raport Taktyczny AI (Analiza Anomalii i Przewag)")
+        st.subheader(" Automated Tactical Scouting Report (AI Insights)" if selected_lang == "EN" else " Automatyczny Raport Taktyczny AI (Analiza Anomalii i Przewag)")
         st.caption(
             "Algorithmic anomaly detection based on League Z-Scores (|σ| ≥ 1.0) and direct stylistic clashes."
             if selected_lang == "EN"
@@ -3071,7 +3071,7 @@ with tab_h2h:
         col_ai_a, col_ai_b = st.columns(2)
 
         with col_ai_a:
-            st.markdown(f"#### 🔍 {team_a} vs Liga")
+            st.markdown(f"####  {team_a} vs Liga")
             if ins_a:
                 for text, kind in ins_a:
                     if kind == "strength":
@@ -3082,7 +3082,7 @@ with tab_h2h:
                 st.info("Drużyna porusza się w granicach ligowej średniej we wszystkich kluczowych metrykach." if selected_lang == "PL" else "The team operates strictly within league average boundaries.")
 
         with col_ai_b:
-            st.markdown(f"#### 🔍 {team_b} vs Liga")
+            st.markdown(f"####  {team_b} vs Liga")
             if ins_b:
                 for text, kind in ins_b:
                     if kind == "strength":
@@ -3094,7 +3094,7 @@ with tab_h2h:
 
         # Sekcja bezpośredniego starcia stylów
         if clashes:
-            st.markdown("#### ⚡ Główne Różnice Stylistyczne w tym Meczu" if selected_lang == "PL" else "#### ⚡ Critical Stylistic Clashes in this Matchup")
+            st.markdown("####  Główne Różnice Stylistyczne w tym Meczu" if selected_lang == "PL" else "####  Critical Stylistic Clashes in this Matchup")
             for c in clashes:
                 st.warning(c)
 
