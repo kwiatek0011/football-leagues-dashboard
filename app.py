@@ -3040,38 +3040,66 @@ with tab_h2h:
 
 
 # =========================================================
+    # =========================================================
         # AUTOMATYCZNY SILNIK RAPORTOWY AI (TACTICAL INSIGHTS)
         # =========================================================
         st.markdown("---")
-        st.subheader(" Automated Tactical Scouting Report (AI Insights)" if selected_lang == "EN" else " Automatyczny Raport Taktyczny AI (Analiza Anomalii i Przewag)")
-        st.caption(
-            "Algorithmic anomaly detection based on League Z-Scores (|σ| ≥ 1.0) and direct stylistic clashes."
-            if selected_lang == "EN"
-            else "Algorytmiczny system wykrywania anomalii względem ligi (|σ| ≥ 1.0) oraz bezpośrednich dysproporcji stylów obu zespołów."
-        )
+        
+        col_ai_head, col_ai_sens = st.columns([2.2, 1.2])
+        with col_ai_head:
+            st.subheader("🧠 Automated Tactical Scouting Report (AI Insights)" if selected_lang == "EN" else "🧠 Automatyczny Raport Taktyczny AI (Analiza Anomalii i Przewag)")
+            st.caption(
+                "Algorithmic anomaly detection based on standardized league deviations and direct match clashes."
+                if selected_lang == "EN"
+                else "Algorytmiczny system wykrywania anomalii względem ligi oraz bezpośrednich dysproporcji stylów obu zespołów."
+            )
+        with col_ai_sens:
+            # Suwak czułości: mniejsza sigma = więcej wykrytych niuansów
+            ai_sensitivity = st.slider(
+                "Czułość algorytmu (Próg σ):" if selected_lang == "PL" else "Algorithm Sensitivity (σ threshold):",
+                min_value=0.40,
+                max_value=1.30,
+                value=0.70,
+                step=0.05,
+                key="slider_ai_threshold"
+            )
 
-        # Konfiguracja metryk do analizatora: (PL, EN, kolumna, czy_mniej_znaczy_lepiej)
+        # Rozszerzona baza 18 metryk taktycznych
         ai_metrics_pool = [
             ("Gole Strzelone", "Goals Scored", "Gole_na_mecz", False),
             ("Gole Stracone", "Goals Conceded", "Gole_stracone_na_mecz", True),
             ("Wykreowane xG", "Created xG", "xG_na_mecz", False),
             ("Dopuszczone xGA", "Conceded xGA", "xGA_na_mecz", True),
+            ("Bilans Bramkowy", "Goal Difference", "Bilans_Bramkowy", False),
+            ("Bilans Wykreowanego Zagrożenia (xG - xGA)", "xG Delta (xG - xGA)", "Bilans_xG", False),
             ("xG z Gry Otwartej", "Open Play xG", "xG_OP_na_mecz", False),
+            ("xGA Dopuszczone z Gry Otwartej", "Open Play xGA", "xGA_OP_na_mecz", True),
+            ("xG ze Stałych Fragmentów", "Set Play xG", "xG_SP_na_mecz", False),
+            ("xGA Dopuszczone ze SFG", "Set Play xGA", "xGA_SP_na_mecz", True),
+            ("Jakość Wykończenia Strzałów (xGOT)", "Shot Quality (xGOT)", "xGOT_na_mecz", False),
+            ("Jakość Czystych Strzałów Rywala (xAGOT)", "Opponent Shot Quality (xAGOT)", "xAGOT_na_mecz", True),
             ("Strzały z Szesnastki", "Box Shots", "Strzaly_z_pola_karnego", False),
+            ("Kontakty w Polu Karnym Rywala", "Box Touches", "Box_Touches_Mean", False),
             ("Posiadanie Piłki (%)", "Ball Possession (%)", "Posiadanie", False),
-            ("Długie Piłki", "Long Balls", "Long_Balls_Mean", False),
             ("Podania na Połowie Rywala", "Opponent Half Passes", "Passes_Opp_Half_Mean", False),
+            ("Długie Piłki", "Long Balls", "Long_Balls_Mean", False),
             ("Wygrane Pojedynki", "Duels Won", "Pojedynki_Wygrane", False)
         ]
 
         ins_a, ins_b, clashes = generate_tactical_ai_insights(
-            team_stats, team_a, team_b, ai_metrics_pool, lang="EN" if selected_lang == "EN" else "PL"
+            team_stats, 
+            team_a, 
+            team_b, 
+            ai_metrics_pool, 
+            threshold=ai_sensitivity, 
+            clash_threshold=ai_sensitivity * 1.15,
+            lang="EN" if selected_lang == "EN" else "PL"
         )
 
         col_ai_a, col_ai_b = st.columns(2)
 
         with col_ai_a:
-            st.markdown(f"####  {team_a} vs Liga")
+            st.markdown(f"#### 🔍 {team_a} vs Liga ({len(ins_a)} anomalii)")
             if ins_a:
                 for text, kind in ins_a:
                     if kind == "strength":
@@ -3079,10 +3107,10 @@ with tab_h2h:
                     else:
                         st.error(text)
             else:
-                st.info("Drużyna porusza się w granicach ligowej średniej we wszystkich kluczowych metrykach." if selected_lang == "PL" else "The team operates strictly within league average boundaries.")
+                st.info("Brak istotnych odchyleń przy bieżącym progu czułości." if selected_lang == "PL" else "No significant deviations at current threshold.")
 
         with col_ai_b:
-            st.markdown(f"####  {team_b} vs Liga")
+            st.markdown(f"#### 🔍 {team_b} vs Liga ({len(ins_b)} anomalii)")
             if ins_b:
                 for text, kind in ins_b:
                     if kind == "strength":
@@ -3090,13 +3118,12 @@ with tab_h2h:
                     else:
                         st.error(text)
             else:
-                st.info("Drużyna porusza się w granicach ligowej średniej we wszystkich kluczowych metrykach." if selected_lang == "PL" else "The team operates strictly within league average boundaries.")
+                st.info("Brak istotnych odchyleń przy bieżącym progu czułości." if selected_lang == "PL" else "No significant deviations at current threshold.")
 
-        # Sekcja bezpośredniego starcia stylów
         if clashes:
-            st.markdown("####  Główne Różnice Stylistyczne w tym Meczu" if selected_lang == "PL" else "####  Critical Stylistic Clashes in this Matchup")
+            st.markdown(f"#### ⚡ Główne Różnice Stylistyczne w tym Meczu ({len(clashes)})" if selected_lang == "PL" else f"#### ⚡ Critical Stylistic Clashes ({len(clashes)})")
             for c in clashes:
-                st.warning(c)
+                st.warning(c)    
 
 
 
