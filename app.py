@@ -2789,15 +2789,15 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, lang="PL")
         
         # Wykrywanie anomalii ligowych dla Drużyny A
         if norm_za >= 1.0:
-            insights_a.append((f"🔥 **{lbl}**: {val_a:.2f} *(+{za:+.1f}σ ponad ligę)*", "strength"))
+            insights_a.append((f" **{lbl}**: {val_a:.2f} *(+{za:+.1f}σ ponad ligę)*", "strength"))
         elif norm_za <= -1.0:
-            insights_a.append((f"⚠️ **{lbl}**: {val_a:.2f} *({za:+.1f}σ poniżej ligi)*", "weakness"))
+            insights_a.append((f" **{lbl}**: {val_a:.2f} *({za:+.1f}σ poniżej ligi)*", "weakness"))
             
         # Wykrywanie anomalii ligowych dla Drużyny B
         if norm_zb >= 1.0:
-            insights_b.append((f"🔥 **{lbl}**: {val_b:.2f} *(+{zb:+.1f}σ ponad ligę)*", "strength"))
+            insights_b.append((f" **{lbl}**: {val_b:.2f} *(+{zb:+.1f}σ ponad ligę)*", "strength"))
         elif norm_zb <= -1.0:
-            insights_b.append((f"⚠️ **{lbl}**: {val_b:.2f} *({zb:+.1f}σ poniżej ligi)*", "weakness"))
+            insights_b.append((f" **{lbl}**: {val_b:.2f} *({zb:+.1f}σ poniżej ligi)*", "weakness"))
             
         # Bezpośrednie zderzenie H2H (różnica > 1.2 odchylenia standardowego między nimi)
         diff_z = norm_za - norm_zb
@@ -2809,11 +2809,11 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, lang="PL")
             
             if lang == "EN":
                 h2h_clashes.append(
-                    f"⚔️ **Major Disparity in {lbl}**: **{leader}** ({v_lead:.2f}) completely outclasses **{chaser}** ({v_chase:.2f})."
+                    f" **Major Disparity in {lbl}**: **{leader}** ({v_lead:.2f}) completely outclasses **{chaser}** ({v_chase:.2f})."
                 )
             else:
                 h2h_clashes.append(
-                    f"⚔️ **Wyraźna przewaga w: {lbl}**: **{leader}** ({v_lead:.2f}) deklasuje rywala **{chaser}** ({v_chase:.2f})."
+                    f" **Wyraźna przewaga w: {lbl}**: **{leader}** ({v_lead:.2f}) deklasuje rywala **{chaser}** ({v_chase:.2f})."
                 )
 
     return insights_a, insights_b, h2h_clashes
