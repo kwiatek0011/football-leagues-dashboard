@@ -2794,11 +2794,141 @@ with tab_h2h:
         
     st.markdown("---")
     
-    # Placeholder na kolejne kroki
+    # Wyciągamy wiersze dla obu drużyn
+    row_a = team_stats[team_stats["Team"] == team_a].iloc[0]
+    row_b = team_stats[team_stats["Team"] == team_b].iloc[0]
+
+    # Lista metryk: (Etykieta, Nazwa_kolumny, Czy_mniej_znaczy_lepiej)
     if selected_lang == "EN":
-        st.info(f"Teams selected: **{team_a}** vs **{team_b}**. Ready to add Radar Charts and Bar comparisons!")
+        h2h_metrics = [
+            ("Goals Scored / 90", "Gole_na_mecz", False),
+            ("Goals Conceded / 90", "Gole_stracone_na_mecz", True),
+            ("Expected Goals (xG / 90)", "xG_na_mecz", False),
+            ("Conceded Expected Goals (xGA / 90)", "xGA_na_mecz", True),
+            ("Open Play xG / 90", "xG_OP_na_mecz", False),
+            ("Open Play xGA / 90", "xGA_OP_na_mecz", True),
+            ("Set Play xG / 90", "xG_SP_na_mecz", False),
+            ("Set Play xGA / 90", "xGA_SP_na_mecz", True),
+            ("Non-Penalty xG (npxG / 90)", "npxG_na_mecz", False),
+            ("Non-Penalty xGA (npxGA / 90)", "npxGA_na_mecz", True),
+            ("Post-Shot xG (xGOT / 90)", "xGOT_na_mecz", False),
+            ("Conceded Post-Shot xGA (xAGOT / 90)", "xAGOT_na_mecz", True),
+            ("Ball Possession (%)", "Posiadanie", False),
+            ("Passes in Own Half / 90", "Passes_Own_Half_Mean", False),
+            ("Passes in Opponent Half / 90", "Passes_Opp_Half_Mean", False),
+        ]
     else:
-        st.info(f"Wybrano: **{team_a}** vs **{team_b}**. Baza jest gotowa na dodanie radarów i statystyk H2H!")
+        h2h_metrics = [
+            ("Gole Strzelone / mecz", "Gole_na_mecz", False),
+            ("Gole Stracone / mecz", "Gole_stracone_na_mecz", True),
+            ("Expected Goals (xG / mecz)", "xG_na_mecz", False),
+            ("Dopuszczone xGA / mecz", "xGA_na_mecz", True),
+            ("xG z gry otwartej (Open Play)", "xG_OP_na_mecz", False),
+            ("xGA z gry otwartej (Open Play)", "xGA_OP_na_mecz", True),
+            ("xG ze stałych fragmentów", "xG_SP_na_mecz", False),
+            ("xGA ze stałych fragmentów", "xGA_SP_na_mecz", True),
+            ("npxG (bez rzutów karnych)", "npxG_na_mecz", False),
+            ("npxGA (dopuszczone bez karnych)", "npxGA_na_mecz", True),
+            ("xGOT (jakość celnych strzałów)", "xGOT_na_mecz", False),
+            ("xAGOT (jakość celnych rywali)", "xAGOT_na_mecz", True),
+            ("Posiadanie Piłki (%)", "Posiadanie", False),
+            ("Podania na własnej połowie", "Passes_Own_Half_Mean", False),
+            ("Podania na połowie przeciwnika", "Passes_Opp_Half_Mean", False),
+        ]
+
+    # Budowa wierszy tabeli HTML z podświetleniem lepszego wyniku
+    rows_h2h_html = ""
+    plot_labels = []
+    plot_vals_a = []
+    plot_vals_b = []
+
+    for label, col, lower_is_better in h2h_metrics:
+        val_a = float(row_a.get(col, 0.0))
+        val_b = float(row_b.get(col, 0.0))
+        
+        plot_labels.append(label)
+        plot_vals_a.append(val_a)
+        plot_vals_b.append(val_b)
+
+        if lower_is_better:
+            win_a = val_a < val_b
+            win_b = val_b < val_a
+        else:
+            win_a = val_a > val_b
+            win_b = val_b > val_a
+
+        color_a = "#10B981; font-weight: 700;" if win_a else "#94A3B8;"
+        color_b = "#10B981; font-weight: 700;" if win_b else "#94A3B8;"
+
+        fmt = "{:.1f}%" if "%" in label else "{:.2f}"
+        str_a = fmt.format(val_a)
+        str_b = fmt.format(val_b)
+
+        rows_h2h_html += f"""
+        <tr style="height: 32px; border-bottom: 1px solid #21262D;">
+            <td style="text-align: right; width: 25%; font-size: 13.5px; color: {color_a}">{str_a}</td>
+            <td style="text-align: center; width: 50%; font-size: 12.5px; color: #E2E8F0; font-weight: 600;">{label}</td>
+            <td style="text-align: left; width: 25%; font-size: 13.5px; color: {color_b}">{str_b}</td>
+        </tr>
+        """
+
+    card_h2h_html = f"""
+    <div style="background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; padding: 16px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="border-bottom: 2px solid #30363D; height: 36px;">
+                    <th style="text-align: right; width: 25%; color: #38BDF8; font-size: 16px; font-weight: 800;">{team_a}</th>
+                    <th style="text-align: center; width: 50%; color: #8B949E; font-size: 12px; text-transform: uppercase;">VS</th>
+                    <th style="text-align: left; width: 25%; color: #F59E0B; font-size: 16px; font-weight: 800;">{team_b}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows_h2h_html}
+            </tbody>
+        </table>
+    </div>
+    """
+
+    col_h2h_table, col_h2h_chart = st.columns([1.1, 1.2])
+
+    with col_h2h_table:
+        components.html(card_h2h_html, height=580, scrolling=False)
+
+    with col_h2h_chart:
+        fig_h2h = go.Figure()
+        
+        fig_h2h.add_trace(go.Bar(
+            y=plot_labels,
+            x=plot_vals_a,
+            name=team_a,
+            orientation='h',
+            marker=dict(color="#38BDF8"),
+            text=[f"{v:.2f}" for v in plot_vals_a],
+            textposition="auto"
+        ))
+        
+        fig_h2h.add_trace(go.Bar(
+            y=plot_labels,
+            x=plot_vals_b,
+            name=team_b,
+            orientation='h',
+            marker=dict(color="#F59E0B"),
+            text=[f"{v:.2f}" for v in plot_vals_b],
+            textposition="auto"
+        ))
+
+        fig_h2h.update_layout(
+            barmode='group',
+            height=580,
+            template="plotly_dark",
+            paper_bgcolor="#0E1117",
+            plot_bgcolor="#161B22",
+            margin=dict(l=10, r=20, t=30, b=30),
+            yaxis=dict(autorange="reversed", showticklabels=False),
+            xaxis=dict(showgrid=True, gridcolor="#21262D"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+        )
+        st.plotly_chart(fig_h2h, use_container_width=True)
 
 
 
