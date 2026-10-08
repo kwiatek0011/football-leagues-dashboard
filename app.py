@@ -3039,106 +3039,7 @@ with tab_h2h:
         st.plotly_chart(fig_h2h, use_container_width=True)
 
 
-        # =========================================================
-    # MODUŁ: WYKRES RADAROWY H2H (SPIDER CHART - PERCENTYLE)
-    # =========================================================
-    st.markdown("---")
-    st.subheader("🕸️ Tactical Radar Profile (H2H Spider Chart)" if selected_lang == "EN" else "🕸️ Radar Taktyczny H2H (Spider Chart)")
-    st.caption(
-        "Percentile ranks (0-100) relative to the league. 100 = League best, 0 = League lowest. Defensive metrics are inverted."
-        if selected_lang == "EN"
-        else "Wartości w percentylach (0-100) względem całej ligi. 100 = Elita ligowa, 0 = Najsłabszy wynik. Metryki obronne są odwrócone."
-    )
-
-    # 8 zrównoważonych filarów taktycznych do radaru
-    radar_config = [
-        ("Kreacja xG", "xG Creation", "xG_na_mecz", False),
-        ("Atak Pozycyjny", "Open Play xG", "xG_OP_na_mecz", False),
-        ("Szesnastka (Strzały)", "Box Threat", "Strzaly_z_pola_karnego", False),
-        ("Posiadanie Piłki", "Possession", "Posiadanie", False),
-        ("Kontrola Połowy Rywala", "Field Tilt", "Passes_Opp_Half_Mean", False),
-        ("Wygrane Pojedynki", "Duels Won", "Pojedynki_Wygrane", False),
-        ("Gra Bezpośrednia", "Directness", "Long_Balls_Mean", False),
-        ("Szczelność Obrony (1/xGA)", "Defensive Solidity", "xGA_na_mecz", True),
-    ]
-
-    radar_categories = []
-    pct_a = []
-    pct_b = []
-
-    for pl_name, en_name, col, lower_is_better in radar_config:
-        lbl = en_name if selected_lang == "EN" else pl_name
-        radar_categories.append(lbl)
-        
-        series = team_stats[col].rank(pct=True) * 100.0
-        
-        if lower_is_better:
-            series = 100.0 - series
             
-        team_a_idx = team_stats[team_stats["Team"] == team_a].index[0]
-        team_b_idx = team_stats[team_stats["Team"] == team_b].index[0]
-        
-        pct_a.append(round(series.loc[team_a_idx], 1))
-        pct_b.append(round(series.loc[team_b_idx], 1))
-
-    radar_cats_closed = radar_categories + [radar_categories[0]]
-    pct_a_closed = pct_a + [pct_a[0]]
-    pct_b_closed = pct_b + [pct_b[0]]
-
-    fig_radar = go.Figure()
-
-    fig_radar.add_trace(go.Scatterpolar(
-        r=pct_a_closed,
-        theta=radar_cats_closed,
-        fill='toself',
-        name=team_a,
-        line=dict(color='#38BDF8', width=2.5),
-        fillcolor='rgba(56, 189, 248, 0.25)',
-        hovertemplate="<b>%{theta}</b><br>" + f"{team_a}: " + "<b>%{r:.1f}th percentile</b><extra></extra>"
-    ))
-
-    fig_radar.add_trace(go.Scatterpolar(
-        r=pct_b_closed,
-        theta=radar_cats_closed,
-        fill='toself',
-        name=team_b,
-        line=dict(color='#F59E0B', width=2.5),
-        fillcolor='rgba(245, 158, 11, 0.25)',
-        hovertemplate="<b>%{theta}</b><br>" + f"{team_b}: " + "<b>%{r:.1f}th percentile</b><extra></extra>"
-    ))
-
-    fig_radar.update_layout(
-        polar=dict(
-            radialaxis=dict(
-                visible=True,
-                range=[0, 100],
-                showticklabels=True,
-                ticksuffix="%",
-                tickfont=dict(size=9, color="#64748B"),
-                gridcolor="#21262D"
-            ),
-            angularaxis=dict(
-                tickfont=dict(size=11, color="#E2E8F0", family="sans-serif"),
-                linecolor="#30363D",
-                gridcolor="#21262D"
-            ),
-            bgcolor="#161B22"
-        ),
-        template="plotly_dark",
-        paper_bgcolor="#0E1117",
-        height=580,
-        margin=dict(l=60, r=60, t=40, b=40),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.04,
-            xanchor="center",
-            x=0.5,
-            font=dict(size=13)
-        )
-    )
-
-    st.plotly_chart(fig_radar, use_container_width=True)
  
 # =========================================================
     # =========================================================
@@ -3226,6 +3127,112 @@ with tab_h2h:
             for c in clashes:
                 st.warning(c)    
 
+
+    # =========================================================
+    # MODUŁ: WYKRES RADAROWY H2H (SPIDER CHART - PERCENTYLE)
+    # =========================================================
+    st.markdown("---")
+    st.subheader("🕸️ Tactical Radar Profile (H2H Spider Chart)" if selected_lang == "EN" else "🕸️ Radar Taktyczny H2H (Spider Chart)")
+    st.caption(
+        "Percentile ranks (0-100) relative to the league. 100 = League best, 0 = League lowest. Defensive metrics are inverted."
+        if selected_lang == "EN"
+        else "Wartości w percentylach (0-100) względem całej ligi. 100 = Elita ligowa, 0 = Najsłabszy wynik. Metryki obronne są odwrócone."
+    )
+
+    # 8 zrównoważonych filarów taktycznych do radaru
+    radar_config = [
+        ("Kreacja xG", "xG Creation", "xG_na_mecz", False),
+        ("Atak Pozycyjny", "Open Play xG", "xG_OP_na_mecz", False),
+        ("Szesnastka (Strzały)", "Box Threat", "Strzaly_z_pola_karnego", False),
+        ("Posiadanie Piłki", "Possession", "Posiadanie", False),
+        ("Kontrola Połowy Rywala", "Field Tilt", "Passes_Opp_Half_Mean", False),
+        ("Wygrane Pojedynki", "Duels Won", "Pojedynki_Wygrane", False),
+        ("Gra Bezpośrednia", "Directness", "Long_Balls_Mean", False),
+        ("Szczelność Obrony (1/xGA)", "Defensive Solidity", "xGA_na_mecz", True),
+    ]
+
+    radar_categories = []
+    pct_a = []
+    pct_b = []
+
+    for pl_name, en_name, col, lower_is_better in radar_config:
+        lbl = en_name if selected_lang == "EN" else pl_name
+        radar_categories.append(lbl)
+        
+        # Wyliczanie rangi percentylowej w lidze (0 do 100)
+        series = team_stats[col].rank(pct=True) * 100.0
+        
+        # Inwersja dla obrony (im niższe dopuszczone xGA, tym wyższy percentyl)
+        if lower_is_better:
+            series = 100.0 - series
+            
+        team_a_idx = team_stats[team_stats["Team"] == team_a].index[0]
+        team_b_idx = team_stats[team_stats["Team"] == team_b].index[0]
+        
+        pct_a.append(round(series.loc[team_a_idx], 1))
+        pct_b.append(round(series.loc[team_b_idx], 1))
+
+    # Zamknięcie obwodu wielokąta w radarze (pierwszy punkt powtórzony na końcu)
+    radar_cats_closed = radar_categories + [radar_categories[0]]
+    pct_a_closed = pct_a + [pct_a[0]]
+    pct_b_closed = pct_b + [pct_b[0]]
+
+    fig_radar = go.Figure()
+
+    # Zarys Drużyny A
+    fig_radar.add_trace(go.Scatterpolar(
+        r=pct_a_closed,
+        theta=radar_cats_closed,
+        fill='toself',
+        name=team_a,
+        line=dict(color='#38BDF8', width=2.5),
+        fillcolor='rgba(56, 189, 248, 0.25)',
+        hovertemplate="<b>%{theta}</b><br>" + f"{team_a}: " + "<b>%{r:.1f}th percentile</b><extra></extra>"
+    ))
+
+    # Zarys Drużyny B
+    fig_radar.add_trace(go.Scatterpolar(
+        r=pct_b_closed,
+        theta=radar_cats_closed,
+        fill='toself',
+        name=team_b,
+        line=dict(color='#F59E0B', width=2.5),
+        fillcolor='rgba(245, 158, 11, 0.25)',
+        hovertemplate="<b>%{theta}</b><br>" + f"{team_b}: " + "<b>%{r:.1f}th percentile</b><extra></extra>"
+    ))
+
+    fig_radar.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 100],
+                showticklabels=True,
+                ticksuffix="%",
+                tickfont=dict(size=9, color="#64748B"),
+                gridcolor="#21262D"
+            ),
+            angularaxis=dict(
+                tickfont=dict(size=11, color="#E2E8F0", family="sans-serif"),
+                linecolor="#30363D",
+                gridcolor="#21262D"
+            ),
+            bgcolor="#161B22"
+        ),
+        template="plotly_dark",
+        paper_bgcolor="#0E1117",
+        height=580,
+        margin=dict(l=60, r=60, t=40, b=40),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.04,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=13)
+        )
+    )
+
+    st.plotly_chart(fig_radar, use_container_width=True)        
 
 
 # =========================================================================
