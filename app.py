@@ -2759,6 +2759,66 @@ with tab_druzyny:
     st.plotly_chart(fig_z, use_container_width=True)
 
 
+def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, lang="PL"):
+    """
+    Silnik analityczny AI:
+    1. Wykrywa anomalie ligowe (Z-Score > 1.0σ lub < -1.0σ)
+    2. Wykrywa kluczowe dysproporcje bezpośrednie pomiędzy Drużyną A i Drużyną B
+    """
+    row_a = df[df["Team"] == team_a].iloc[0]
+    row_b = df[df["Team"] == team_b].iloc[0]
+    
+    insights_a = []
+    insights_b = []
+    h2h_clashes = []
+
+    for label_pl, label_en, col, lower_is_better in metrics_config:
+        lbl = label_en if lang == "EN" else label_pl
+        val_a = float(row_a[col])
+        val_b = float(row_b[col])
+        mean_val = df[col].mean()
+        std_val = df[col].std() if df[col].std() > 0 else 1.0
+        
+        # Z-Score względem ligi
+        za = (val_a - mean_val) / std_val
+        zb = (val_b - mean_val) / std_val
+        
+        # Odwracamy interpretację dla xGA i goli straconych (mniej = lepiej)
+        norm_za = -za if lower_is_better else za
+        norm_zb = -zb if lower_is_better else zb
+        
+        # Wykrywanie anomalii ligowych dla Drużyny A
+        if norm_za >= 1.0:
+            insights_a.append((f"🔥 **{lbl}**: {val_a:.2f} *(+{za:+.1f}σ ponad ligę)*", "strength"))
+        elif norm_za <= -1.0:
+            insights_a.append((f"⚠️ **{lbl}**: {val_a:.2f} *({za:+.1f}σ poniżej ligi)*", "weakness"))
+            
+        # Wykrywanie anomalii ligowych dla Drużyny B
+        if norm_zb >= 1.0:
+            insights_b.append((f"🔥 **{lbl}**: {val_b:.2f} *(+{zb:+.1f}σ ponad ligę)*", "strength"))
+        elif norm_zb <= -1.0:
+            insights_b.append((f"⚠️ **{lbl}**: {val_b:.2f} *({zb:+.1f}σ poniżej ligi)*", "weakness"))
+            
+        # Bezpośrednie zderzenie H2H (różnica > 1.2 odchylenia standardowego między nimi)
+        diff_z = norm_za - norm_zb
+        if abs(diff_z) >= 1.2:
+            leader = team_a if diff_z > 0 else team_b
+            chaser = team_b if diff_z > 0 else team_a
+            v_lead = val_a if diff_z > 0 else val_b
+            v_chase = val_b if diff_z > 0 else val_a
+            
+            if lang == "EN":
+                h2h_clashes.append(
+                    f"⚔️ **Major Disparity in {lbl}**: **{leader}** ({v_lead:.2f}) completely outclasses **{chaser}** ({v_chase:.2f})."
+                )
+            else:
+                h2h_clashes.append(
+                    f"⚔️ **Wyraźna przewaga w: {lbl}**: **{leader}** ({v_lead:.2f}) deklasuje rywala **{chaser}** ({v_chase:.2f})."
+                )
+
+    return insights_a, insights_b, h2h_clashes
+
+
 # =========================================================================
 # TAB: PORÓWNANIE DRUŻYN (H2H)
 # =========================================================================
@@ -2978,6 +3038,65 @@ with tab_h2h:
         )
         st.plotly_chart(fig_h2h, use_container_width=True)
 
+
+# =========================================================
+        # AUTOMATYCZNY SILNIK RAPORTOWY AI (TACTICAL INSIGHTS)
+        # =========================================================
+        st.markdown("---")
+        st.subheader("🧠 Automated Tactical Scouting Report (AI Insights)" if selected_lang == "EN" else "🧠 Automatyczny Raport Taktyczny AI (Analiza Anomalii i Przewag)")
+        st.caption(
+            "Algorithmic anomaly detection based on League Z-Scores (|σ| ≥ 1.0) and direct stylistic clashes."
+            if selected_lang == "EN"
+            else "Algorytmiczny system wykrywania anomalii względem ligi (|σ| ≥ 1.0) oraz bezpośrednich dysproporcji stylów obu zespołów."
+        )
+
+        # Konfiguracja metryk do analizatora: (PL, EN, kolumna, czy_mniej_znaczy_lepiej)
+        ai_metrics_pool = [
+            ("Gole Strzelone", "Goals Scored", "Gole_na_mecz", False),
+            ("Gole Stracone", "Goals Conceded", "Gole_stracone_na_mecz", True),
+            ("Wykreowane xG", "Created xG", "xG_na_mecz", False),
+            ("Dopuszczone xGA", "Conceded xGA", "xGA_na_mecz", True),
+            ("xG z Gry Otwartej", "Open Play xG", "xG_OP_na_mecz", False),
+            ("Strzały z Szesnastki", "Box Shots", "Strzaly_z_pola_karnego", False),
+            ("Posiadanie Piłki (%)", "Ball Possession (%)", "Posiadanie", False),
+            ("Długie Piłki", "Long Balls", "Long_Balls_Mean", False),
+            ("Podania na Połowie Rywala", "Opponent Half Passes", "Passes_Opp_Half_Mean", False),
+            ("Wygrane Pojedynki", "Duels Won", "Pojedynki_Wygrane", False)
+        ]
+
+        ins_a, ins_b, clashes = generate_tactical_ai_insights(
+            team_stats, team_a, team_b, ai_metrics_pool, lang="EN" if selected_lang == "EN" else "PL"
+        )
+
+        col_ai_a, col_ai_b = st.columns(2)
+
+        with col_ai_a:
+            st.markdown(f"#### 🔍 {team_a} vs Liga")
+            if ins_a:
+                for text, kind in ins_a:
+                    if kind == "strength":
+                        st.success(text)
+                    else:
+                        st.error(text)
+            else:
+                st.info("Drużyna porusza się w granicach ligowej średniej we wszystkich kluczowych metrykach." if selected_lang == "PL" else "The team operates strictly within league average boundaries.")
+
+        with col_ai_b:
+            st.markdown(f"#### 🔍 {team_b} vs Liga")
+            if ins_b:
+                for text, kind in ins_b:
+                    if kind == "strength":
+                        st.success(text)
+                    else:
+                        st.error(text)
+            else:
+                st.info("Drużyna porusza się w granicach ligowej średniej we wszystkich kluczowych metrykach." if selected_lang == "PL" else "The team operates strictly within league average boundaries.")
+
+        # Sekcja bezpośredniego starcia stylów
+        if clashes:
+            st.markdown("#### ⚡ Główne Różnice Stylistyczne w tym Meczu" if selected_lang == "PL" else "#### ⚡ Critical Stylistic Clashes in this Matchup")
+            for c in clashes:
+                st.warning(c)
 
 
 
