@@ -2325,17 +2325,28 @@ with tab_druzyny:
                 "Expected Goals (xG)": ("xG_For", "xG_Against"),
                 "Open Play xG": ("xG_OP_For", "xG_OP_Against"),
                 "Shot Quality (xGOT)": ("xGOT_For", "xGOT_Against"),
+                "Big Chances": ("Big_Chances", "Big_Chances_Against"),
+                "Total Shots": ("Shots", "Shots_Against"),
+                "Shots on Target": ("Shots_On_Target", "Shots_On_Target_Against"),
                 "Shots Inside Box": ("Box_Shots", "Box_Shots_Against"),
+                "Shots Outside Box": ("Outside_Box_Shots", "Outside_Box_Shots_Against"),
+                "Total Passes": ("Passes_Total", "Passes_Total_Against"),
                 "Accurate Long Balls": ("Long_Balls", "Long_Balls_Against"),
                 "Duels Won": ("Duels_Won", "Duels_Won_Against"),
-                "Ball Possession (%)": ("Possession", "Possession_Against_Temp") 
+                "Ball Possession (%)": ("Possession", "Possession_Against_Temp")
+
             }
         else:
             roll_metrics = {
                 "Expected Goals (xG)": ("xG_For", "xG_Against"),
                 "xG z Gry Otwartej (Open Play)": ("xG_OP_For", "xG_OP_Against"),
                 "Jakość Strzałów (xGOT)": ("xGOT_For", "xGOT_Against"),
+                "Wielkie Szanse (Big Chances)": ("Big_Chances", "Big_Chances_Against"),
+                "Strzały Ogółem": ("Shots", "Shots_Against"),
+                "Strzały Celne": ("Shots_On_Target", "Shots_On_Target_Against"),
                 "Strzały z pola karnego": ("Box_Shots", "Box_Shots_Against"),
+                "Strzały z dystansu": ("Outside_Box_Shots", "Outside_Box_Shots_Against"),
+                "Podania Ogółem": ("Passes_Total", "Passes_Total_Against"),
                 "Celne Długie Piłki": ("Long_Balls", "Long_Balls_Against"),
                 "Wygrane Pojedynki": ("Duels_Won", "Duels_Won_Against"),
                 "Posiadanie Piłki (%)": ("Possession", "Possession_Against_Temp")
