@@ -2759,11 +2759,10 @@ with tab_druzyny:
     st.plotly_chart(fig_z, use_container_width=True)
 
 
-def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, lang="PL"):
+def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, threshold=0.70, clash_threshold=0.80, lang="PL"):
     """
     Silnik analityczny AI:
-    1. Wykrywa anomalie ligowe (Z-Score > 1.0σ lub < -1.0σ)
-    2. Wykrywa kluczowe dysproporcje bezpośrednie pomiędzy Drużyną A i Drużyną B
+    Wykrywa anomalie ligowe oraz bezpośrednie dysproporcje na podstawie zadanego progu odchylenia standardowego (sigma).
     """
     row_a = df[df["Team"] == team_a].iloc[0]
     row_b = df[df["Team"] == team_b].iloc[0]
@@ -2773,35 +2772,37 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, lang="PL")
     h2h_clashes = []
 
     for label_pl, label_en, col, lower_is_better in metrics_config:
+        if col not in df.columns:
+            continue
+
         lbl = label_en if lang == "EN" else label_pl
         val_a = float(row_a[col])
         val_b = float(row_b[col])
         mean_val = df[col].mean()
         std_val = df[col].std() if df[col].std() > 0 else 1.0
         
-        # Z-Score względem ligi
         za = (val_a - mean_val) / std_val
         zb = (val_b - mean_val) / std_val
         
-        # Odwracamy interpretację dla xGA i goli straconych (mniej = lepiej)
+        # Inwersja dla metryk defensywnych (mniej = lepiej)
         norm_za = -za if lower_is_better else za
         norm_zb = -zb if lower_is_better else zb
         
-        # Wykrywanie anomalii ligowych dla Drużyny A
-        if norm_za >= 1.0:
-            insights_a.append((f" **{lbl}**: {val_a:.2f} *(+{za:+.1f}σ ponad ligę)*", "strength"))
-        elif norm_za <= -1.0:
-            insights_a.append((f" **{lbl}**: {val_a:.2f} *({za:+.1f}σ poniżej ligi)*", "weakness"))
+        # Wykrywanie atutów i mankamentów Drużyny A
+        if norm_za >= threshold:
+            insights_a.append((f"🔥 **{lbl}**: {val_a:.2f} *(+{za:+.1f}σ ponad ligę)*", "strength"))
+        elif norm_za <= -threshold:
+            insights_a.append((f"⚠️ **{lbl}**: {val_a:.2f} *({za:+.1f}σ poniżej ligi)*", "weakness"))
             
-        # Wykrywanie anomalii ligowych dla Drużyny B
-        if norm_zb >= 1.0:
-            insights_b.append((f" **{lbl}**: {val_b:.2f} *(+{zb:+.1f}σ ponad ligę)*", "strength"))
-        elif norm_zb <= -1.0:
-            insights_b.append((f" **{lbl}**: {val_b:.2f} *({zb:+.1f}σ poniżej ligi)*", "weakness"))
+        # Wykrywanie atutów i mankamentów Drużyny B
+        if norm_zb >= threshold:
+            insights_b.append((f"🔥 **{lbl}**: {val_b:.2f} *(+{zb:+.1f}σ ponad ligę)*", "strength"))
+        elif norm_zb <= -threshold:
+            insights_b.append((f"⚠️ **{lbl}**: {val_b:.2f} *({zb:+.1f}σ poniżej ligi)*", "weakness"))
             
-        # Bezpośrednie zderzenie H2H (różnica > 1.2 odchylenia standardowego między nimi)
+        # Wykrywanie bezpośrednich dysproporcji stylu
         diff_z = norm_za - norm_zb
-        if abs(diff_z) >= 1.2:
+        if abs(diff_z) >= clash_threshold:
             leader = team_a if diff_z > 0 else team_b
             chaser = team_b if diff_z > 0 else team_a
             v_lead = val_a if diff_z > 0 else val_b
@@ -2809,15 +2810,14 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, lang="PL")
             
             if lang == "EN":
                 h2h_clashes.append(
-                    f" **Major Disparity in {lbl}**: **{leader}** ({v_lead:.2f}) completely outclasses **{chaser}** ({v_chase:.2f})."
+                    f"⚔️ **Major Disparity in {lbl}**: **{leader}** ({v_lead:.2f}) holds a clear edge over **{chaser}** ({v_chase:.2f}) [Δ {abs(diff_z):.1f}σ]."
                 )
             else:
                 h2h_clashes.append(
-                    f" **Wyraźna przewaga w: {lbl}**: **{leader}** ({v_lead:.2f}) deklasuje rywala **{chaser}** ({v_chase:.2f})."
+                    f"⚔️ **Wyraźna przewaga w: {lbl}**: **{leader}** ({v_lead:.2f}) dominuje nad **{chaser}** ({v_chase:.2f}) [Różnica: {abs(diff_z):.1f}σ]."
                 )
 
     return insights_a, insights_b, h2h_clashes
-
 
 # =========================================================================
 # TAB: PORÓWNANIE DRUŻYN (H2H)
