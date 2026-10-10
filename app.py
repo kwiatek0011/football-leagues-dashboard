@@ -192,12 +192,24 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
     def get_col(row, *candidates):
         for c in candidates:
             if c in row and pd.notna(row[c]):
-                return row[c]
+                val = row[c]
+                if isinstance(val, str) and val.strip().lower() in ["none", "-", ""]:
+                    return 0.0
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return 0.0
         for col_name in row.index:
             col_lower = str(col_name).lower()
             for cand in candidates:
                 if cand.lower() in col_lower and pd.notna(row[col_name]):
-                    return row[col_name]
+                    val = row[col_name]
+                    if isinstance(val, str) and val.strip().lower() in ["none", "-", ""]:
+                        return 0.0
+                    try:
+                        return float(val)
+                    except (ValueError, TypeError):
+                        return 0.0
         return 0.0
 
     records = []
@@ -260,6 +272,26 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
         bc_h = get_col(row, "Big chances home")
         bc_a = get_col(row, "Big chances away")
 
+        # Nowo dodane metryki z pliku
+        blocks_h = get_col(row, "Blocks home")
+        blocks_a = get_col(row, "Blocks away")
+        clearances_h = get_col(row, "Clearances home")
+        clearances_a = get_col(row, "Clearances away")
+        fouls_h = get_col(row, "Fouls committed home")
+        fouls_a = get_col(row, "Fouls committed away")
+        woodwork_h = get_col(row, "Hit woodwork home")
+        woodwork_a = get_col(row, "Hit woodwork away")
+        dribbles_h = get_col(row, "Successful dribbles home")
+        dribbles_a = get_col(row, "Successful dribbles away")
+        throws_h = get_col(row, "Throws home")
+        throws_a = get_col(row, "Throws away")
+        yellows_h = get_col(row, "Yellow cards home")
+        yellows_a = get_col(row, "Yellow cards away")
+        reds_h = get_col(row, "Red cards home")
+        reds_a = get_col(row, "Red cards away")
+        duels_tot_h = get_col(row, "Duels home")
+        duels_tot_a = get_col(row, "Duels away")
+
         # Rekord gospodarza (Home)
         records.append({
             "Team": row["home_team"],
@@ -315,6 +347,15 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
             "Outside_Box_Shots_Against": out_s_a,
             "Big_Chances_Against": bc_a,
             "Wygrana": 1 if pts_h == 3 else 0,
+            "Blocks": blocks_h, "Blocks_Against": blocks_a,
+            "Clearances": clearances_h, "Clearances_Against": clearances_a,
+            "Fouls": fouls_h, "Fouls_Against": fouls_a,
+            "Hit_Woodwork": woodwork_h, "Hit_Woodwork_Against": woodwork_a,
+            "Successful_Dribbles": dribbles_h, "Successful_Dribbles_Against": dribbles_a,
+            "Throws": throws_h, "Throws_Against": throws_a,
+            "Yellow_Cards": yellows_h, "Yellow_Cards_Against": yellows_a,
+            "Red_Cards": reds_h, "Red_Cards_Against": reds_a,
+            "Duels_Total": duels_tot_h, "Duels_Total_Against": duels_tot_a,
         })
         
         # Rekord gościa (Away)
@@ -372,6 +413,15 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
             "Outside_Box_Shots_Against": out_s_h,
             "Big_Chances_Against": bc_h,
             "Wygrana": 1 if pts_a == 3 else 0,
+            "Blocks": blocks_a, "Blocks_Against": blocks_h,
+            "Clearances": clearances_a, "Clearances_Against": clearances_h,
+            "Fouls": fouls_a, "Fouls_Against": fouls_h,
+            "Hit_Woodwork": woodwork_a, "Hit_Woodwork_Against": woodwork_h,
+            "Successful_Dribbles": dribbles_a, "Successful_Dribbles_Against": dribbles_h,
+            "Throws": throws_a, "Throws_Against": throws_h,
+            "Yellow_Cards": yellows_a, "Yellow_Cards_Against": yellows_h,
+            "Red_Cards": reds_a, "Red_Cards_Against": reds_h,
+            "Duels_Total": duels_tot_a, "Duels_Total_Against": duels_tot_h,
         })
         
     matches_df = pd.DataFrame(records)
@@ -449,6 +499,22 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
         Big_Chances_Against_Mean=("Big_Chances_Against", "mean"),
         Wygrane=("Wygrana", "sum"),
         Win_Rate=("Wygrana", lambda s: round(s.mean() * 100, 1)),
+        Clearances_Mean=("Clearances", "mean"),
+        Blocks_Mean=("Blocks", "mean"),
+        Fouls_Mean=("Fouls", "mean"),
+        Fouls_Against_Mean=("Fouls_Against", "mean"),
+        Dribbles_Mean=("Successful_Dribbles", "mean"),
+        Woodwork_Mean=("Hit_Woodwork", "mean"),
+        Woodwork_Sum=("Hit_Woodwork", "sum"),
+        Yellow_Cards_Mean=("Yellow_Cards", "mean"),
+        Yellow_Cards_Sum=("Yellow_Cards", "sum"),
+        Red_Cards_Sum=("Red_Cards", "sum"),
+        Throws_Mean=("Throws", "mean"),
+        Ground_Duels_Won_Mean=("Ground_Duels_Won", "mean"),
+        Aerial_Duels_Won_Mean=("Aerial_Duels_Won", "mean"),
+        Corners_Against_Mean=("Corners_Against", "mean"),
+        Red_Cards_Mean=("Red_Cards", "mean"),
+        
     ).reset_index()
     
     team_stats["Bilans_Bramkowy"] = team_stats["Gole_Strzelone"] - team_stats["Gole_Stracone"]
@@ -798,19 +864,26 @@ def compute_custom_table(matches_subset, is_xg=False):
     components.html(html_code, height=720, scrolling=False)
 
 def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_header, color_scale="Greens", sort_asc=False):
-    """Tworzy zsynchronizowany widok 2-kolumnowy wspierający ujemne wartości oraz dynamiczny zakres (Top 20 vs Całość)."""
+    """Tworzy zsynchronizowany widok 2-kolumnowy. Napis i filtr Top 20 pojawia się TYLKO dla Top 5 lig."""
     lang = st.session_state.get("selected_lang", "PL")
     
-    # 0. Bezpieczny przełącznik zakresu (Top 20 vs Całość) z unikalnym kluczem dla każdego wykresu
-    scope_opts = ["Top 20", "Pełna Lista (Wszystkie zespoły)"] if lang == "PL" else ["Top 20", "Full List (All Teams)"]
-    selected_scope = st.radio(
-        "Zakres rankingu:" if lang == "PL" else "Ranking Scope:",
-        scope_opts,
-        index=0,
-        horizontal=True,
-        key=f"scope_radio_{col_name}"
-    )
-    show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
+    # Sprawdzamy czy użytkownik analizuje połączoną bazę Top 5 lig (ok. 100 drużyn)
+    is_top5 = (current_league.get("file") == "TOP5")
+    
+    if is_top5:
+        scope_opts = ["Top 20", "Pełna Lista (Wszystkie zespoły)"] if lang == "PL" else ["Top 20", "Full List (All Teams)"]
+        selected_scope = st.radio(
+            "Zakres rankingu:" if lang == "PL" else "Ranking Scope:",
+            scope_opts,
+            index=0,
+            horizontal=True,
+            key=f"scope_radio_{col_name}"
+        )
+        show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
+        title_suffix = f" ({len(df)})" if show_all else " (Top 20)"
+    else:
+        show_all = True
+        title_suffix = ""  # Żadnego dopisku (Top 20) dla pojedynczej ligi!
 
     # Sortowanie danych
     full_sorted_df = df.sort_values(by=col_name, ascending=sort_asc).copy().reset_index(drop=True)
@@ -851,8 +924,7 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
     x_min, x_max = sorted_df[col_name].min(), sorted_df[col_name].max()
     x_range = [x_min * 1.3 if x_min < 0 else 0, x_max * 1.25 if x_max > 0 else 0]
     
-    # Dynamiczna wysokość wykresu w zależności od liczby drużyn
-    plot_height = 620 if not show_all else max(620, len(sorted_df) * 26)
+    plot_height = 620 if not (is_top5 and show_all) else max(620, len(sorted_df) * 26)
 
     fig.update_layout(
         height=plot_height,
@@ -860,7 +932,7 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#F8FAFC",
         title=dict(
-            text=f"<b>{title_chart}</b>" + (f" ({len(sorted_df)})" if show_all else " (Top 20)"),
+            text=f"<b>{title_chart}</b>{title_suffix}",
             x=0.04,
             y=0.98 if show_all else 0.96,
             font=dict(size=16, color="#0F172A")
@@ -937,7 +1009,7 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
     with col_l:
         st.plotly_chart(fig, use_container_width=True)
     with col_r:
-        components.html(table_html, height=plot_height, scrolling=True if show_all else False)
+        components.html(table_html, height=plot_height, scrolling=True if (is_top5 and show_all) else False)
 
 # =========================================================================
 # WYBÓR LIGI I DYNAMICZNE WCZYTANIE DANYCH
@@ -1133,26 +1205,39 @@ with tab_ogolne:
         
         # Przełącznik widoku: Top 20 vs Cała tabela (przydatne zwłaszcza przy Top 5 Leagues)
         # Przełącznik widoku: Top 20 vs Cała tabela
-        scope_opts = ["Top 20", "Pełna Tabela (Wszystkie zespoły)"] if selected_lang == "PL" else ["Top 20", "Full Standings (All Teams)"]
-        selected_scope = st.radio(
-            "Zakres tabeli:" if selected_lang == "PL" else "Standings Scope:",
-            scope_opts,
-            index=0,
-            horizontal=True,
-            key="radio_table_scope"
-        )
+        # Przełącznik widoku wyświetlamy TYLKO gdy wybrano Top 5 lig Europy
+        is_top5_selected = (current_league["file"] == "TOP5")
         
-        show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
-        tab_real = tab_real_full if show_all else tab_real_full.head(20)
-        tab_xg_comp = tab_xg_comp_full if show_all else tab_xg_comp_full.head(20)
+        if is_top5_selected:
+            scope_opts = ["Top 20", "Pełna Tabela (Wszystkie zespoły)"] if selected_lang == "PL" else ["Top 20", "Full Standings (All Teams)"]
+            selected_scope = st.radio(
+                "Zakres tabeli:" if selected_lang == "PL" else "Standings Scope:",
+                scope_opts,
+                index=0,
+                horizontal=True,
+                key="radio_table_scope"
+            )
+            show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
+            tab_real = tab_real_full if show_all else tab_real_full.head(20)
+            tab_xg_comp = tab_xg_comp_full if show_all else tab_xg_comp_full.head(20)
+            suffix_real = f" ({len(tab_real)})" if show_all else " (Top 20)"
+            suffix_xg = f" ({len(tab_xg_comp)})" if show_all else " (Top 20)"
+        else:
+            show_all = True
+            tab_real = tab_real_full
+            tab_xg_comp = tab_xg_comp_full
+            suffix_real = ""
+            suffix_xg = ""
         
         col_t1, col_t2 = st.columns(2)
         with col_t1:
-            title_real = ("Real Standings" if selected_lang == "EN" else "Tabela Realna") + (f" ({len(tab_real)})" if show_all else " (Top 20)")
+            title_real = ("Real Standings" if selected_lang == "EN" else "Tabela Realna") + suffix_real
             components.html(render_dark_table_html(tab_real, title_real, is_xg=False), height=620, scrolling=True if show_all else False)
         with col_t2:
-            title_xg = ("Expected Goals (xG) Table" if selected_lang == "EN" else "Tabela xG") + (f" ({len(tab_xg_comp)})" if show_all else " (Top 20)")
+            title_xg = ("Expected Goals (xG) Table" if selected_lang == "EN" else "Tabela xG") + suffix_xg
             components.html(render_dark_table_html(tab_xg_comp, title_xg, is_xg=True), height=620, scrolling=True if show_all else False)
+        
+        
 
 
     # 2. Widok: Dom vs Wyjazd
@@ -1165,10 +1250,10 @@ with tab_ogolne:
         
         col_h, col_a = st.columns(2)
         with col_h:
-            t_home = "🏠 Home Table" if selected_lang == "EN" else "🏠 Tabela: Mecze u Siebie"
+            t_home = " Home Table" if selected_lang == "EN" else " Tabela: Mecze u Siebie"
             components.html(render_dark_table_html(tab_home, t_home, is_xg=False), height=590, scrolling=False)
         with col_a:
-            t_away = "🚌 Away Table" if selected_lang == "EN" else "🚌 Tabela: Mecze na Wyjeździe"
+            t_away = " Away Table" if selected_lang == "EN" else " Tabela: Mecze na Wyjeździe"
             components.html(render_dark_table_html(tab_away, t_away, is_xg=False), height=590, scrolling=False)
 
         st.markdown("---")
@@ -2491,39 +2576,59 @@ with tab_druzyny:
     components.html(table_html, height=210, scrolling=False)
 
 # =========================================================
-    # WIZUALIZACJA: MAPA STRZAŁÓW (SYMULACJA)
+    # =========================================================
+    # WIZUALIZACJA: MAPA STRZAŁÓW (SYMULACJA: ATAK)
     # =========================================================
     st.markdown("---")
     
-    # Nagłówek i przełącznik trybu w dwóch kolumnach (tytuł po lewej, przełącznik "z boczku")
-    col_map_head, col_map_toggle = st.columns([3, 1])
+    col_map_head, col_map_toggle = st.columns([2.6, 1.4])
     
     with col_map_head:
         if selected_lang == "EN":
             st.markdown(f"##### Shot Map Visualization (Simulated): {selected_prof_team}")
-            st.caption("Approximate distribution of shots inside and outside the penalty box. Assumes attacking towards the right side.")
+            st.caption("Approximate distribution of shots inside and outside the penalty box. Attacking towards the right goal.")
         else:
             st.markdown(f"##### Wizualizacja Mapy Strzałów (Symulacja): {selected_prof_team}")
             st.caption("Przybliżone rozmieszczenie strzałów z pola karnego i z dystansu. Atak prowadzony na prawą bramkę.")
             
     with col_map_toggle:
-        mode_opts = ["Suma (Cały Sezon)", "Średnia (Na mecz)"] if selected_lang == "PL" else ["Total (Full Season)", "Average (Per Match)"]
+        mode_opts = ["Suma (Cały Sezon)", "Średnia (Na mecz)", "Pojedynczy Mecz"] if selected_lang == "PL" else ["Total (Full Season)", "Average (Per Match)", "Single Match"]
         shot_mode = st.radio(
             "Tryb wyświetlania:" if selected_lang == "PL" else "Display Mode:", 
             mode_opts, 
             key="radio_shot_map_mode"
         )
-        
-    is_avg = "Średnia" in shot_mode or "Average" in shot_mode
 
-    # Pobranie danych w zależności od wybranego trybu
-    if is_avg:
+    # Przygotowanie listy meczów do wyboru
+    pitch_match_labels = [
+        f"Kolejka {r['Kolejka']}: vs {r['Opponent']} ({r['Venue']}) [{int(r['Goals_For'])}:{int(r['Goals_Against'])}]"
+        for _, r in t_matches.iterrows()
+    ]
+
+    sel_pitch_match_idx = 0
+    if "Pojedynczy" in shot_mode or "Single" in shot_mode:
+        sel_pitch_match_label = st.selectbox(
+            "Wybierz mecz do analizy strzałów:" if selected_lang == "PL" else "Select match for shot map:",
+            pitch_match_labels,
+            index=len(pitch_match_labels) - 1 if len(pitch_match_labels) > 0 else 0,
+            key="sb_shot_map_match_sel"
+        )
+        sel_pitch_match_idx = pitch_match_labels.index(sel_pitch_match_label)
+
+    # Wyznaczenie liczby strzałów w ataku
+    if "Pojedynczy" in shot_mode or "Single" in shot_mode:
+        m_row_pitch = t_matches.iloc[sel_pitch_match_idx]
+        raw_box = m_row_pitch['Box_Shots']
+        raw_out = m_row_pitch['Outside_Box_Shots']
+        dots_box = int(raw_box)
+        dots_out = int(raw_out)
+        box_label = f"Inside Box ({dots_box})" if selected_lang == "EN" else f"W polu karnym ({dots_box})"
+        out_label = f"Outside Box ({dots_out})" if selected_lang == "EN" else f"Zza pola karnego ({dots_out})"
+    elif "Średnia" in shot_mode or "Average" in shot_mode:
         raw_box = t_matches['Box_Shots'].mean()
         raw_out = t_matches['Outside_Box_Shots'].mean()
-        # Do narysowania kropek potrzebujemy liczb całkowitych
         dots_box = int(round(raw_box))
         dots_out = int(round(raw_out))
-        # Tekst do legendy (z jednym miejscem po przecinku dla dokładności)
         box_label = f"Inside Box ({raw_box:.1f})" if selected_lang == "EN" else f"W polu karnym ({raw_box:.1f})"
         out_label = f"Outside Box ({raw_out:.1f})" if selected_lang == "EN" else f"Zza pola karnego ({raw_out:.1f})"
     else:
@@ -2538,8 +2643,6 @@ with tab_druzyny:
     def draw_dark_pitch():
         fig_p = go.Figure()
         line_col = "#475569" 
-        
-        # Obrys, środek i pola
         fig_p.add_shape(type="rect", x0=0, y0=0, x1=105, y1=68, line=dict(color=line_col, width=1.5))
         fig_p.add_shape(type="line", x0=52.5, y0=0, x1=52.5, y1=68, line=dict(color=line_col, width=1.5))
         fig_p.add_shape(type="circle", x0=52.5-9.15, y0=34-9.15, x1=52.5+9.15, y1=34+9.15, line=dict(color=line_col, width=1.5))
@@ -2555,7 +2658,7 @@ with tab_druzyny:
         fig_p.add_shape(type="path", path="M 88.5, 26.5 A 9.15,9.15 0 0,0 88.5, 41.5", line=dict(color=line_col, width=1.5))
 
         fig_p.update_layout(
-            height=550,
+            height=530,
             xaxis=dict(visible=False, range=[-3, 108], fixedrange=True),
             yaxis=dict(visible=False, range=[-3, 71], scaleanchor="x", scaleratio=1, fixedrange=True),
             plot_bgcolor="#0E1117", paper_bgcolor="#0E1117", margin=dict(l=10, r=10, t=30, b=10),
@@ -2564,29 +2667,25 @@ with tab_druzyny:
         return fig_p
 
     fig_pitch = draw_dark_pitch()
-    seed_val = sum(ord(c) for c in selected_prof_team)
+    seed_val = sum(ord(c) for c in selected_prof_team) + (sel_pitch_match_idx * 17)
 
-    # Nanoszenie strzałów z pola karnego (liczba kropek = dots_box)
     if dots_box > 0:
         np.random.seed(seed_val)
         box_x = np.random.triangular(88.5, 96.0, 103.0, dots_box)
         box_y = np.random.triangular(18.0, 34.0, 50.0, dots_box)
-        
         fig_pitch.add_trace(go.Scatter(
             x=box_x, y=box_y, mode="markers", name=box_label,
-            marker=dict(color="#10B981", size=8 if is_avg else 7, line=dict(width=1, color="#0E1117")),
+            marker=dict(color="#10B981", size=9 if ("Średnia" in shot_mode or "Pojedynczy" in shot_mode) else 7, line=dict(width=1, color="#0E1117")),
             hoverinfo="name"
         ))
 
-    # Nanoszenie strzałów z dystansu (liczba kropek = dots_out)
     if dots_out > 0:
         np.random.seed(seed_val + 1)
         out_x = np.random.triangular(65.0, 85.0, 88.4, dots_out) 
         out_y = np.random.triangular(12.0, 34.0, 56.0, dots_out)
-        
         fig_pitch.add_trace(go.Scatter(
             x=out_x, y=out_y, mode="markers", name=out_label,
-            marker=dict(color="#38BDF8", size=8 if is_avg else 7, line=dict(width=1, color="#0E1117")),
+            marker=dict(color="#38BDF8", size=9 if ("Średnia" in shot_mode or "Pojedynczy" in shot_mode) else 7, line=dict(width=1, color="#0E1117")),
             hoverinfo="name"
         ))
 
@@ -2594,34 +2693,48 @@ with tab_druzyny:
     with col_map2:
         st.plotly_chart(fig_pitch, use_container_width=True)
 
-# =========================================================
-    # WIZUALIZACJA: MAPA DOPUSZCZONYCH STRZAŁÓW (OBRONA)
+    # =========================================================
+    # WIZUALIZACJA: MAPA DOPUSZCZONYCH STRZAŁÓW (SYMULACJA: OBRONA)
     # =========================================================
     st.markdown("---")
     
-    # Nagłówek i przełącznik trybu dla mapy defensywnej
-    col_map_head_def, col_map_toggle_def = st.columns([3, 1])
+    col_map_head_def, col_map_toggle_def = st.columns([2.6, 1.4])
     
     with col_map_head_def:
         if selected_lang == "EN":
             st.markdown(f"##### Conceded Shot Map (Simulated): {selected_prof_team}")
-            st.caption("Approximate distribution of shots conceded by the team. Assumes opponents attacking towards the left side (defending).")
+            st.caption("Approximate distribution of shots conceded. Opponents attacking towards the left goal.")
         else:
             st.markdown(f"##### Wizualizacja Dopuszczonych Strzałów (Symulacja): {selected_prof_team}")
             st.caption("Przybliżone rozmieszczenie strzałów dopuszczonych rywalom z pola karnego i z dystansu. Obrona na lewą bramkę.")
             
     with col_map_toggle_def:
-        mode_opts_def = ["Suma (Cały Sezon)", "Średnia (Na mecz)"] if selected_lang == "PL" else ["Total (Full Season)", "Average (Per Match)"]
+        mode_opts_def = ["Suma (Cały Sezon)", "Średnia (Na mecz)", "Pojedynczy Mecz"] if selected_lang == "PL" else ["Total (Full Season)", "Average (Per Match)", "Single Match"]
         shot_mode_def = st.radio(
             "Tryb wyświetlania:" if selected_lang == "PL" else "Display Mode:", 
             mode_opts_def, 
-            key="radio_shot_map_mode_def" # Ważne: inny klucz niż wyżej!
+            key="radio_shot_map_mode_def"
         )
-        
-    is_avg_def = "Średnia" in shot_mode_def or "Average" in shot_mode_def
 
-    # Pobranie statystyk rywala (Against)
-    if is_avg_def:
+    sel_pitch_def_match_idx = 0
+    if "Pojedynczy" in shot_mode_def or "Single" in shot_mode_def:
+        sel_pitch_def_match_label = st.selectbox(
+            "Wybierz mecz do analizy obrony:" if selected_lang == "PL" else "Select match for defense map:",
+            pitch_match_labels,
+            index=len(pitch_match_labels) - 1 if len(pitch_match_labels) > 0 else 0,
+            key="sb_shot_map_def_match_sel"
+        )
+        sel_pitch_def_match_idx = pitch_match_labels.index(sel_pitch_def_match_label)
+
+    if "Pojedynczy" in shot_mode_def or "Single" in shot_mode_def:
+        m_row_def = t_matches.iloc[sel_pitch_def_match_idx]
+        raw_box_def = m_row_def['Box_Shots_Against']
+        raw_out_def = m_row_def['Outside_Box_Shots_Against']
+        dots_box_def = int(raw_box_def)
+        dots_out_def = int(raw_out_def)
+        box_label_def = f"Inside Box ({dots_box_def})" if selected_lang == "EN" else f"W polu karnym ({dots_box_def})"
+        out_label_def = f"Outside Box ({dots_out_def})" if selected_lang == "EN" else f"Zza pola karnego ({dots_out_def})"
+    elif "Średnia" in shot_mode_def or "Average" in shot_mode_def:
         raw_box_def = t_matches['Box_Shots_Against'].mean()
         raw_out_def = t_matches['Outside_Box_Shots_Against'].mean()
         dots_box_def = int(round(raw_box_def))
@@ -2636,35 +2749,26 @@ with tab_druzyny:
         box_label_def = f"Inside Box ({dots_box_def})" if selected_lang == "EN" else f"W polu karnym ({dots_box_def})"
         out_label_def = f"Outside Box ({dots_out_def})" if selected_lang == "EN" else f"Zza pola karnego ({dots_out_def})"
 
-    # Wykorzystujemy zdefiniowaną wyżej funkcję rysującą boisko
     fig_pitch_def = draw_dark_pitch()
-    
-    # Inny seed losowania, żeby kropki ułożyły się inaczej niż w ataku
-    seed_val_def = sum(ord(c) for c in selected_prof_team) + 99 
+    seed_val_def = sum(ord(c) for c in selected_prof_team) + (sel_pitch_def_match_idx * 19) + 99
 
-    # Nanoszenie DOPUSZCZONYCH strzałów z pola karnego (atak rywala na LEWĄ bramkę)
     if dots_box_def > 0:
         np.random.seed(seed_val_def)
-        # Szesnastka z lewej strony ma współrzędne X od 0 do 16.5
         box_x_def = np.random.triangular(2.0, 9.0, 16.5, dots_box_def)
         box_y_def = np.random.triangular(18.0, 34.0, 50.0, dots_box_def)
-        
         fig_pitch_def.add_trace(go.Scatter(
             x=box_x_def, y=box_y_def, mode="markers", name=box_label_def,
-            marker=dict(color="#EF4444", size=8 if is_avg_def else 7, line=dict(width=1, color="#0E1117")), # Czerwone kropki zagrożenia
+            marker=dict(color="#EF4444", size=9 if ("Średnia" in shot_mode_def or "Pojedynczy" in shot_mode_def) else 7, line=dict(width=1, color="#0E1117")),
             hoverinfo="name"
         ))
 
-    # Nanoszenie DOPUSZCZONYCH strzałów z dystansu (przed lewą szesnastką)
     if dots_out_def > 0:
         np.random.seed(seed_val_def + 1)
-        # Przedpole lewej bramki to X od ok. 16.6 do 40
         out_x_def = np.random.triangular(16.6, 22.0, 40.0, dots_out_def) 
         out_y_def = np.random.triangular(12.0, 34.0, 56.0, dots_out_def)
-        
         fig_pitch_def.add_trace(go.Scatter(
             x=out_x_def, y=out_y_def, mode="markers", name=out_label_def,
-            marker=dict(color="#F59E0B", size=8 if is_avg_def else 7, line=dict(width=1, color="#0E1117")), # Pomarańczowe kropki
+            marker=dict(color="#F59E0B", size=9 if ("Średnia" in shot_mode_def or "Pojedynczy" in shot_mode_def) else 7, line=dict(width=1, color="#0E1117")),
             hoverinfo="name"
         ))
 
@@ -2677,9 +2781,9 @@ with tab_druzyny:
     # =========================================================
     st.markdown("---")
     st.subheader(
-        f"📊 Statistical DNA: {selected_prof_team} (Z-Score Standardization)" 
+        f" Statistical DNA: {selected_prof_team} (Z-Score Standardization)" 
         if selected_lang == "EN" 
-        else f"📊 Statystyczne DNA: {selected_prof_team} (Standaryzacja Z-Score)"
+        else f"Statystyczne DNA: {selected_prof_team} (Standaryzacja Z-Score)"
     )
     st.caption(
         "Shows how many standard deviations (σ) the team deviates from the average (0.00 = Average, +1.50 = European Elite, -1.50 = Bottom tier)."
@@ -2758,6 +2862,294 @@ with tab_druzyny:
 
     st.plotly_chart(fig_z, use_container_width=True)
 
+    # =========================================================
+    # MODUŁ: CO NAPRAWDĘ DAJE PUNKTY TEJ DRUŻYNIE? (KEY DRIVERS)
+    # =========================================================
+    st.markdown("---")
+    st.subheader(
+        f" Key Performance Drivers: What Actually Wins Games for {selected_prof_team}?"
+        if selected_lang == "EN"
+        else f" Co Naprawdę Daje Punkty Drużynie: {selected_prof_team}?"
+    )
+    st.caption(
+        "Correlation between specific match metrics and Points gained by this team. Identifies which tactical elements are critical to their success."
+        if selected_lang == "EN"
+        else "Współczynnik korelacji pomiędzy elementami gry w meczu a zdobytymi punktami przez ten zespół. Pokazuje, co realnie napędza ich zwycięstwa."
+    )
+
+    # Pula metryk meczowych do zbadania w meczach tej drużyny
+    driver_metrics = [
+        ("Wygrane Pojedynki", "Duels Won", "Duels_Won"),
+        ("Kontakty w Szesnastce", "Box Touches", "Box_Touches"),
+        ("Strzały z Pola Karnego", "Box Shots", "Box_Shots"),
+        ("xG z Gry Otwartej", "Open Play xG", "xG_OP_For"),
+        ("xG ze SFG", "Set Play xG", "xG_SP_For"),
+        ("Podania na Połowie Rywala", "Opp Half Passes", "Passes_Opp_Half"),
+        ("Podania na Własnej Połowie", "Own Half Passes", "Passes_Own_Half"),
+        ("Posiadanie Piłki (%)", "Possession %", "Possession"),
+        ("Długie Piłki", "Long Balls", "Long_Balls"),
+        ("Rzuty Rożne", "Corners", "Corners"),
+        ("Obrony Bramkarza", "Saves", "Keeper_Saves")
+    ]
+
+    drivers_list = []
+    
+    # Liczymy korelację dla każdego parametru z punktami (Points)
+    for lbl_pl, lbl_en, col in driver_metrics:
+        if col in t_matches.columns and t_matches[col].std() > 0:
+            corr = t_matches[col].corr(t_matches["Points"])
+            if not np.isnan(corr):
+                lbl = lbl_en if selected_lang == "EN" else lbl_pl
+                drivers_list.append({
+                    "Metric": lbl,
+                    "Correlation": round(corr, 2),
+                    "AbsCorr": abs(corr)
+                })
+
+    if len(drivers_list) > 0:
+        df_drivers = pd.DataFrame(drivers_list).sort_values(by="Correlation", ascending=False).reset_index(drop=True)
+
+        col_drv_chart, col_drv_txt = st.columns([1.3, 1.0])
+
+        with col_drv_chart:
+            bar_colors = [
+                "#10B981" if c >= 0.3 else ("#EF4444" if c <= -0.3 else "#64748B")
+                for c in df_drivers["Correlation"]
+            ]
+
+            fig_drv = go.Figure(go.Bar(
+                y=df_drivers["Metric"],
+                x=df_drivers["Correlation"],
+                orientation='h',
+                marker=dict(color=bar_colors),
+                text=[f"{c:+.2f}" for c in df_drivers["Correlation"]],
+                textposition="outside",
+                textfont=dict(color="#FFFFFF", size=11)
+            ))
+
+            fig_drv.update_layout(
+                height=450,
+                template="plotly_dark",
+                paper_bgcolor="#0E1117",
+                plot_bgcolor="#161B22",
+                margin=dict(l=160, r=40, t=30, b=30),
+                yaxis=dict(autorange="reversed"),
+                xaxis=dict(
+                    title="Correlation with Points (-1 to +1)" if selected_lang == "EN" else "Korelacja ze zdobytymi punktami (-1 do +1)",
+                    range=[-1.0, 1.0],
+                    zeroline=True,
+                    zerolinecolor="#FFFFFF",
+                    gridcolor="#21262D"
+                )
+            )
+            st.plotly_chart(fig_drv, use_container_width=True)
+
+        with col_drv_txt:
+            top_positive = df_drivers.iloc[0]
+            bottom_metric = df_drivers.iloc[-1]
+            
+            duels_row = df_drivers[df_drivers["Metric"].str.contains("Pojedynki|Duels")]
+            own_pass_row = df_drivers[df_drivers["Metric"].str.contains("Własnej|Own Half")]
+
+            st.markdown("####  Wnioski Taktyczne" if selected_lang == "PL" else "####  Tactical Takeaways")
+            
+            st.success(
+                f" **Główny motor napędowy:** Najsilniejszy związek z punktami ma **{top_positive['Metric']}** (r = {top_positive['Correlation']:+.2f}). Gdy ten element funkcjonuje, zespół regularnie punktuje."
+                if selected_lang == "PL"
+                else f" **Primary Success Driver:** The highest correlation with points belongs to **{top_positive['Metric']}** (r = {top_positive['Correlation']:+.2f})."
+            )
+
+            if bottom_metric["Correlation"] < 0:
+                st.warning(
+                    f" **Pułapka stylu:** **{bottom_metric['Metric']}** ma ujemną korelację z punktami (r = {bottom_metric['Correlation']:+.2f}). Często duża liczba w tej statystyce oznacza, że mecz nie układał się po ich myśli (np. gonienie wyniku)."
+                    if selected_lang == "PL"
+                    else f" **Style Trap:** **{bottom_metric['Metric']}** is negatively correlated with points (r = {bottom_metric['Correlation']:+.2f})."
+                )
+
+            if not duels_row.empty and not own_pass_row.empty:
+                r_d = duels_row.iloc[0]["Correlation"]
+                r_p = own_pass_row.iloc[0]["Correlation"]
+                
+                if r_d > r_p:
+                    porownanie_txt = f"Wygrane pojedynki (r = {r_d:+.2f}) są dla {selected_prof_team} **znacznie cenniejsze** niż bezpieczne klepanie na własnej połowie (r = {r_p:+.2f})."
+                else:
+                    porownanie_txt = f"Spokojne rozegranie od tyłu (r = {r_p:+.2f}) daje tej drużynie **więcej korzyści punktowych** niż bezpośrednia walka fizyczna o pojedynki (r = {r_d:+.2f})."
+                
+                st.info(f" **Pojedynki vs Rozegranie:** {porownanie_txt}")
+
+
+    # =========================================================
+    # MODUŁ: RAPORT POMECZOWY AI (SINGLE MATCH DEBRIEF - FULL)
+    # =========================================================
+    st.markdown("---")
+    st.subheader(
+        f" Single Match Tactical Debrief: {selected_prof_team}"
+        if selected_lang == "EN"
+        else f" Pomeczowy Raport Analityczny AI: {selected_prof_team}"
+    )
+    st.caption(
+        "Complete statistical breakdown across all available match metrics comparing the performance to team seasonal norms and league baselines."
+        if selected_lang == "EN"
+        else "Kompletna pomeczowa analiza wszystkich dostępnych metryk: zderzenie występu z normą sezonową drużyny oraz średnią ligową."
+    )
+
+    # Budujemy etykiety meczów do wyboru z listy
+    match_labels = []
+    for idx, r_m in t_matches.iterrows():
+        res_str = f"{int(r_m['Goals_For'])}:{int(r_m['Goals_Against'])}"
+        lbl = f"Kolejka {r_m['Kolejka']}: vs {r_m['Opponent']} ({r_m['Venue']}) [{res_str}]"
+        match_labels.append(lbl)
+
+    col_match_sel, col_sens_sel = st.columns([2.2, 1.2])
+    with col_match_sel:
+        selected_match_label = st.selectbox(
+            "Wybierz spotkanie do analizy:" if selected_lang == "PL" else "Select fixture to analyze:",
+            match_labels,
+            index=len(match_labels) - 1 if len(match_labels) > 0 else 0,
+            key="sb_single_match_debrief"
+        )
+    with col_sens_sel:
+        # Suwak czułości wykrywania odchyleń pomeczowych
+        match_threshold_pct = st.slider(
+            "Próg anomalii meczowej (% odchyłki):" if selected_lang == "PL" else "Match Anomaly Threshold (% dev):",
+            min_value=10, max_value=50, value=20, step=5,
+            key="slider_match_anomaly_sens"
+        )
+
+    sel_idx = match_labels.index(selected_match_label)
+    m_row = t_matches.iloc[sel_idx]
+
+    # Kompletna pula wszystkich dostępnych w bazie danych metryk meczowych:
+    # (Nazwa PL, Nazwa EN, Kolumna w meczu, Kolumna średniej w team_stats, Czy_mniej_znaczy_lepiej)
+    match_eval_pool = [
+        # BRAMKI I FINISZ
+        ("Gole Strzelone", "Goals Scored", "Goals_For", "Gole_na_mecz", False),
+        ("Gole Stracone", "Goals Conceded", "Goals_Against", "Gole_stracone_na_mecz", True),
+        ("Wykreowane xG", "Created xG", "xG_For", "xG_na_mecz", False),
+        ("Dopuszczone xGA", "Conceded xGA", "xG_Against", "xGA_na_mecz", True),
+        ("xG z Gry Otwartej (OP)", "Open Play xG", "xG_OP_For", "xG_OP_na_mecz", False),
+        ("xGA z Gry Otwartej (OP)", "Open Play xGA", "xG_OP_Against", "xGA_OP_na_mecz", True),
+        ("xG ze SFG", "Set Play xG", "xG_SP_For", "xG_SP_na_mecz", False),
+        ("xGA ze SFG", "Set Play xGA", "xG_SP_Against", "xGA_SP_na_mecz", True),
+        ("npxG (bez karnych)", "Non-Penalty xG", "npxG_For", "npxG_na_mecz", False),
+        ("npxGA (dopuszczone bez karnych)", "Non-Penalty xGA", "npxG_Against", "npxGA_na_mecz", True),
+        ("xGOT (Jakość Strzałów Celnych)", "Shot Quality (xGOT)", "xGOT_For", "xGOT_na_mecz", False),
+        ("xAGOT (Czyste Strzały Rywali)", "Opponent Shot Quality (xAGOT)", "xGOT_Against", "xAGOT_na_mecz", True),
+        
+        # STRZAŁY I POLE KARNE
+        ("Strzały Ogółem", "Total Shots", "Shots", "Strzaly_na_mecz", False),
+        ("Strzały Dopuszczone Rywalom", "Shots Conceded", "Shots_Against", "Shots_Against_Mean", True),
+        ("Strzały Celne", "Shots on Target", "Shots_On_Target", "Celne_strzaly", False),
+        ("Strzały Celne Rywali", "Shots on Target Conceded", "Shots_On_Target_Against", "Shots_On_Target_Against_Mean", True),
+        ("Strzały z Szesnastki", "Box Shots", "Box_Shots", "Strzaly_z_pola_karnego", False),
+        ("Strzały Rywala z Naszej Szesnastki", "Opponent Box Shots", "Box_Shots_Against", "Box_Shots_Against_Mean", True),
+        ("Strzały z Dystansu", "Outside Box Shots", "Outside_Box_Shots", "Strzaly_zza_pola_karnego", False),
+        ("Kontakty w Polu Karnym Rywala", "Box Touches", "Box_Touches", "Box_Touches_Mean", False),
+        ("Kontakty Rywala w Naszym Polu", "Opponent Touches in Our Box", "Box_Touches_Against", "Box_Touches_Against_Mean", True),
+        ("Wielkie Szanse (Big Chances)", "Big Chances", "Big_Chances", "Big_Chances", False),
+        ("Zmarnowane Wielkie Szanse", "Big Chances Missed", "Big_Chances_Missed", "Big_Chances_Missed", True),
+        
+        # DYSTRYBUCJA I KONTROLA
+        ("Posiadanie Piłki (%)", "Ball Possession (%)", "Possession", "Posiadanie", False),
+        ("Podania Ogółem", "Total Passes", "Passes_Total", "Podania_ogolem", False),
+        ("Podania Celne", "Accurate Passes", "Passes_Acc", "Podania_celne", False),
+        ("Podania na Połowie Rywala", "Opponent Half Passes", "Passes_Opp_Half", "Passes_Opp_Half_Mean", False),
+        ("Podania na Własnej Połowie", "Own Half Passes", "Passes_Own_Half", "Passes_Own_Half_Mean", False),
+        ("Dopuszczone Podania na Naszej Połowie", "Opp Passes at Our Half", "Passes_Opp_Half_Against", "Passes_Opp_Half_Against_Mean", True),
+        ("Celne Długie Piłki", "Accurate Long Balls", "Long_Balls", "Long_Balls_Mean", False),
+        ("Celne Dośrodkowania", "Accurate Crosses", "Accurate_Crosses", "Accurate_Crosses_Mean", False),
+        
+        # FAZA PRZEJŚCIOWA, DEFENSIWA I WALKA
+        ("Wygrane Pojedynki Ogółem", "Duels Won", "Duels_Won", "Pojedynki_Wygrane", False),
+        ("Pojedynki na Ziemi Wygrane", "Ground Duels Won", "Ground_Duels_Won", "Ground_Duels_Won", False),
+        ("Pojedynki w Powietrzu Wygrane", "Aerial Duels Won", "Aerial_Duels_Won", "Aerial_Duels_Won", False),
+        ("Odbiory", "Tackles", "Tackles", "Odbiory", False),
+        ("Przejęcia", "Interceptions", "Interceptions", "Przejecia", False),
+        ("Obrony Bramkarza", "Goalkeeper Saves", "Keeper_Saves", "Keeper_Saves_Mean", False),
+        ("Rzuty Rożne Wywalczone", "Corners Won", "Corners", "Rzuty_Rozne", False),
+        ("Rzuty Rożne Dopuszczone", "Corners Conceded", "Corners_Against", "Corners_Against", True),
+        ("Spalone", "Offsides", "Offsides", "Offsides_Mean", True),
+
+        # DYSCYPLINA I INTERWENCJE
+        ("Faule Popełnione", "Fouls Committed", "Fouls", "Fouls_Mean", True),
+        ("Faule Wymuszone na Rywalu", "Fouls Won", "Fouls_Against", "Fouls_Against_Mean", False),
+        ("Żółte Kartki", "Yellow Cards", "Yellow_Cards", "Yellow_Cards_Mean", True),
+        ("Wybicia Piłki (Clearances)", "Clearances", "Clearances", "Clearances_Mean", False),
+        ("Zablokowane Strzały (Bloki)", "Shots Blocked", "Blocks", "Blocks_Mean", False),
+        ("Udane Dryblingi", "Successful Dribbles", "Successful_Dribbles", "Dribbles_Mean", False),
+        ("Strzały w Obramowanie (Słupki/Poprzeczki)", "Hit Woodwork", "Hit_Woodwork", "Woodwork_Mean", False),
+        ("Wrzuty z Autu", "Throw-ins", "Throws", "Throws_Mean", False),
+        ("Czerwone Kartki", "Red Cards", "Red_Cards", "Red_Cards_Mean", True),
+
+        
+    ]
+
+    m_positives = []
+    m_negatives = []
+    m_diff_table = []
+
+    for lbl_pl, lbl_en, m_col, team_col, lower_is_better in match_eval_pool:
+        if m_col in m_row and team_col in team_stats.columns:
+            m_val = float(m_row[m_col])
+            t_avg = float(team_row[team_col])
+            lg_avg = float(team_stats[team_col].mean())
+            lg_std = float(team_stats[team_col].std()) if team_stats[team_col].std() > 0 else 1.0
+
+            # Odchylenie od własnej normy
+            delta_team = m_val - t_avg
+            pct_team = (delta_team / t_avg * 100.0) if t_avg > 0 else 0.0
+
+            # Z-Score względem ligi w tym meczu
+            z_match = (m_val - lg_avg) / lg_std
+
+            lbl = lbl_en if selected_lang == "EN" else lbl_pl
+
+            # Rejestracja w tabeli zbiorczej
+            fmt = "{:.1f}%" if "%" in lbl else ("{:.0f}" if any(w in lbl for w in ["Gole", "Goals", "Strzały", "Shots", "Podania", "Passes", "Pojedynki", "Duels", "Odbiory", "Rożne", "Corners"]) else "{:.2f}")
+            m_diff_table.append({
+                "Metryka": lbl,
+                "Mecz": fmt.format(m_val),
+                "Śr. Zespołu": fmt.format(t_avg),
+                "Delta vs Zespół": f"{delta_team:+.2f} ({pct_team:+.0f}%)",
+                "Śr. Ligi": fmt.format(lg_avg),
+                "Z-Score Ligi": f"{z_match:+.2f}σ"
+            })
+
+            # Klasyfikacja wniosków AI z uwzględnieniem suwaka
+            if (delta_team > 0 and not lower_is_better and pct_team >= match_threshold_pct) or (delta_team < 0 and lower_is_better and pct_team <= -match_threshold_pct):
+                m_positives.append(
+                    f" **{lbl}**: **{m_val:.2f}** (Aż **{pct_team:+.0f}%** powyżej własnej normy {t_avg:.2f} | {z_match:+.1f}σ w skali ligi)"
+                )
+            elif (delta_team < 0 and not lower_is_better and pct_team <= -match_threshold_pct) or (delta_team > 0 and lower_is_better and pct_team >= match_threshold_pct):
+                m_negatives.append(
+                    f" **{lbl}**: **{m_val:.2f}** (Aż **{pct_team:+.0f}%** poniżej własnej normy {t_avg:.2f} | {z_match:+.1f}σ w skali ligi)"
+                )
+
+    # Wyświetlanie kart wniosków AI
+    col_rep_pos, col_rep_neg = st.columns(2)
+
+    with col_rep_pos:
+        st.markdown(f"####  Co Funkcjonowało Ponad Stan? ({len(m_positives)})" if selected_lang == "PL" else f"####  Overperformed Metrics ({len(m_positives)})")
+        if m_positives:
+            for item in m_positives:
+                st.success(item)
+        else:
+            st.info("Brak spektakularnych odskoków in plus — zespół grał na swoim typowym poziomie." if selected_lang == "PL" else "No significant overperformance detected.")
+
+    with col_rep_neg:
+        st.markdown(f"####  Co Wyraźnie Zawiodło? ({len(m_negatives)})" if selected_lang == "PL" else f"####  Underperformed Metrics ({len(m_negatives)})")
+        if m_negatives:
+            for item in m_negatives:
+                st.error(item)
+        else:
+            st.info("Brak drastycznych załamań formy w żadnym z kluczowych parametrów." if selected_lang == "PL" else "No major stylistic collapse detected.")
+
+    # Kompletna tabela ze wszystkimi parametrami
+    st.markdown("---")
+    st.markdown("#####  " + ("Complete Metric Breakdown (Match vs Team vs League)" if selected_lang == "EN" else "Kompletne Zestawienie Wszystkich Metryk (Mecz vs Średnia Zespołu vs Średnia Ligi)"))
+    df_match_display = pd.DataFrame(m_diff_table)
+    st.dataframe(df_match_display, use_container_width=True, hide_index=True)
+
 
 def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, threshold=0.70, clash_threshold=0.80, lang="PL"):
     """
@@ -2820,123 +3212,7 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, threshold=
     return insights_a, insights_b, h2h_clashes
 
 
-    # =========================================================
-    # MODUŁ: CO NAPRAWDĘ DAJE PUNKTY TEJ DRUŻYNIE? (KEY DRIVERS)
-    # =========================================================
-    st.markdown("---")
-    st.subheader(
-        f"🎯 Key Performance Drivers: What Actually Wins Games for {selected_prof_team}?"
-        if selected_lang == "EN"
-        else f"🎯 Co Naprawdę Daje Punkty Drużynie: {selected_prof_team}?"
-    )
-    st.caption(
-        "Correlation between specific match metrics and Points gained by this team. Identifies which tactical elements are critical to their success."
-        if selected_lang == "EN"
-        else "Współczynnik korelacji pomiędzy elementami gry w meczu a zdobytymi punktami przez ten zespół. Pokazuje, co realnie napędza ich zwycięstwa."
-    )
-
-    # Pula metryk meczowych do zbadania w meczach tej drużyny
-    driver_metrics = [
-        ("Wygrane Pojedynki", "Duels Won", "Duels_Won"),
-        ("Kontakty w Szesnastce", "Box Touches", "Box_Touches"),
-        ("Strzały z Pola Karnego", "Box Shots", "Box_Shots"),
-        ("xG z Gry Otwartej", "Open Play xG", "xG_OP_For"),
-        ("xG ze SFG", "Set Play xG", "xG_SP_For"),
-        ("Podania na Połowie Rywala", "Opp Half Passes", "Passes_Opp_Half"),
-        ("Podania na Własnej Połowie", "Own Half Passes", "Passes_Own_Half"),
-        ("Posiadanie Piłki (%)", "Possession %", "Possession"),
-        ("Długie Piłki", "Long Balls", "Long_Balls"),
-        ("Rzuty Rożne", "Corners", "Corners"),
-        ("Obrony Bramkarza", "Saves", "Keeper_Saves")
-    ]
-
-    drivers_list = []
     
-    # Liczymy korelację dla każdego parametru z punktami (Points)
-    for lbl_pl, lbl_en, col in driver_metrics:
-        if col in t_matches.columns and t_matches[col].std() > 0:
-            corr = t_matches[col].corr(t_matches["Points"])
-            if not np.isnan(corr):
-                lbl = lbl_en if selected_lang == "EN" else lbl_pl
-                drivers_list.append({
-                    "Metric": lbl,
-                    "Correlation": round(corr, 2),
-                    "AbsCorr": abs(corr)
-                })
-
-    if len(drivers_list) > 0:
-        df_drivers = pd.DataFrame(drivers_list).sort_values(by="Correlation", ascending=False).reset_index(drop=True)
-
-        col_drv_chart, col_drv_txt = st.columns([1.3, 1.0])
-
-        with col_drv_chart:
-            # Kolory: zielone dla silnie sprzyjających, szare dla neutralnych, czerwone dla metryk niekorzystnych
-            bar_colors = [
-                "#10B981" if c >= 0.3 else ("#EF4444" if c <= -0.3 else "#64748B")
-                for c in df_drivers["Correlation"]
-            ]
-
-            fig_drv = go.Figure(go.Bar(
-                y=df_drivers["Metric"],
-                x=df_drivers["Correlation"],
-                orientation='h',
-                marker=dict(color=bar_colors),
-                text=[f"{c:+.2f}" for c in df_drivers["Correlation"]],
-                textposition="outside",
-                textfont=dict(color="#FFFFFF", size=11)
-            ))
-
-            fig_drv.update_layout(
-                height=450,
-                template="plotly_dark",
-                paper_bgcolor="#0E1117",
-                plot_bgcolor="#161B22",
-                margin=dict(l=160, r=40, t=30, b=30),
-                yaxis=dict(autorange="reversed"),
-                xaxis=dict(
-                    title="Correlation with Points (-1 to +1)" if selected_lang == "EN" else "Korelacja ze zdobytymi punktami (-1 do +1)",
-                    range=[-1.0, 1.0],
-                    zeroline=True,
-                    zerolinecolor="#FFFFFF",
-                    gridcolor="#21262D"
-                )
-            )
-            st.plotly_chart(fig_drv, use_container_width=True)
-
-        with col_drv_txt:
-            top_positive = df_drivers.iloc[0]
-            bottom_metric = df_drivers.iloc[-1]
-            
-            # Wyszukujemy bezpośrednie porównanie pojedynków z podaniami
-            duels_row = df_drivers[df_drivers["Metric"].str.contains("Pojedynki|Duels")]
-            own_pass_row = df_drivers[df_drivers["Metric"].str.contains("Własnej|Own Half")]
-
-            st.markdown("#### 💡 Wnioski Taktyczne" if selected_lang == "PL" else "#### 💡 Tactical Takeaways")
-            
-            st.success(
-                f"🚀 **Główny motor napędowy:** Najsilniejszy związek z punktami ma **{top_positive['Metric']}** (r = {top_positive['Correlation']:+.2f}). Gdy ten element funkcjonuje, zespół regularnie punktuje."
-                if selected_lang == "PL"
-                else f"🚀 **Primary Success Driver:** The highest correlation with points belongs to **{top_positive['Metric']}** (r = {top_positive['Correlation']:+.2f})."
-            )
-
-            if bottom_metric["Correlation"] < 0:
-                st.warning(
-                    f"⚠️ **Pułapka stylu:** **{bottom_metric['Metric']}** ma ujemną korelację z punktami (r = {bottom_metric['Correlation']:+.2f}). Często duża liczba w tej statystyce oznacza, że mecz nie układał się po ich myśli (np. gonienie wyniku)."
-                    if selected_lang == "PL"
-                    else f"⚠️ **Style Trap:** **{bottom_metric['Metric']}** is negatively correlated with points (r = {bottom_metric['Correlation']:+.2f})."
-                )
-
-            # Bezpośrednie zestawienie z pytania: Pojedynki vs Podania na własnej połowie
-            if not duels_row.empty and not own_pass_row.empty:
-                r_d = duels_row.iloc[0]["Correlation"]
-                r_p = own_pass_row.iloc[0]["Correlation"]
-                
-                if r_d > r_p:
-                    porownanie_txt = f"Wygrane pojedynki (r = {r_d:+.2f}) są dla {selected_prof_team} **znacznie cenniejsze** niż bezpieczne klepanie na własnej połowie (r = {r_p:+.2f})."
-                else:
-                    porownanie_txt = f"Spokojne rozegranie od tyłu (r = {r_p:+.2f}) daje tej drużynie **więcej korzyści punktowych** niż bezpośrednia walka fizyczna o pojedynki (r = {r_d:+.2f})."
-                
-                st.info(f"⚖️ **Pojedynki vs Rozegranie:** {porownanie_txt}")
     
 
 # =========================================================================
@@ -3834,4 +4110,40 @@ with tab_zaleznosci:
         
         st.plotly_chart(fig_km, use_container_width=True)
     else:
-        st.info("Not enough data to run K-Means clustering." if selected_lang == "EN" else "Zbyt mało danych do wykonania klastrowania.")        
+        st.info("Not enough data to run K-Means clustering." if selected_lang == "EN" else "Zbyt mało danych do wykonania klastrowania.")
+
+    # =========================================================
+# AUDYT KOLUMN: EXCEL VS PROGRAM
+# =========================================================
+with st.sidebar.expander("🛠️ Audyt brakujących kolumn z Excela"):
+    # 1. Pobieramy surowe nazwy kolumn z pliku Excel
+    raw_excel_df = pd.read_excel(current_league["file"] if current_league["file"] != "TOP5" else "Ekstraklasa 2026-2027.xlsx")
+    raw_columns = set([str(c).strip() for c in raw_excel_df.columns])
+    
+    # Kolumny czysto techniczne / identyfikacyjne, których nie badamy jako statystyki
+    ignored_cols = {
+        "id", "match_id", "round", "date", "home_team", "away_team", 
+        "home_goals", "away_goals", "home_score", "away_score", "status", "referee"
+    }
+    
+    # 2. Sprawdzamy, które nazwy z Excela NIE występują w matches_df
+    # Poniższa lista zbiera słowa kluczowe, które już parsujesz w funkcji get_col
+    parsed_keywords = [
+        "Expected goals", "xG open play", "xG set play", "xG non-penalty", "xG on target",
+        "Big chances", "Ball possession", "Own half", "Opposition half", "Shots off target",
+        "Blocked shots", "Accurate crosses", "Offsides", "Keeper saves", "Accurate long balls",
+        "Touches in opposition box", "Total shots", "Shots on target", "Shots inside box",
+        "Shots outside box", "Passes", "Accurate passes", "Corners", "Tackles", "Interceptions",
+        "Duels", "Blocks", "Clearances", "Fouls", "woodwork", "dribbles", "Throws", "cards", "Shots"
+    ]
+    
+    missing_cols = []
+    for col in sorted(raw_columns):
+        if col.lower() in ignored_cols:
+            continue
+        # Sprawdzamy czy dana kolumna z Excela została uwzględniona w parserze
+        if not any(k.lower() in col.lower() for k in parsed_keywords):
+            missing_cols.append(col)
+            
+    st.write(f"Znaleziono **{len(missing_cols)}** nieużywanych kolumn:")
+    st.write(missing_cols)            
