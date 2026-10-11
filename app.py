@@ -1011,6 +1011,75 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
     with col_r:
         components.html(table_html, height=plot_height, scrolling=True if (is_top5 and show_all) else False)
 
+
+def render_metric_trend_chart(matches_df, team_stats, match_col, avg_col, metric_label, yaxis_title="Wartość"):
+    """Uniwersalny wykres trendu kolejka po kolejce dla wybranej drużyny na tle średniej ligowej."""
+    lang = st.session_state.get("selected_lang", "PL")
+    st.markdown("---")
+    
+    team_list = sorted(team_stats["Team"].unique().tolist())
+    sel_label = "Select team for trend analysis:" if lang == "EN" else "Wybierz drużynę do analizy serii mecz po meczu:"
+    
+    # Unikalny klucz dla selectboxa oparty o nazwę kolumny
+    selected_trend_team = st.selectbox(sel_label, team_list, index=0, key=f"sb_trend_{match_col}")
+    
+    team_matches = matches_df[matches_df["Team"] == selected_trend_team].copy().reset_index(drop=True)
+    team_matches["Kolejka"] = team_matches.index + 1
+    
+    league_avg = team_stats[avg_col].mean()
+    
+    fig_tr = go.Figure()
+    fig_tr.add_trace(go.Scatter(
+        x=team_matches["Kolejka"],
+        y=team_matches[match_col],
+        mode="lines+markers",
+        name=selected_trend_team,
+        line=dict(color="#38BDF8", width=3),
+        marker=dict(size=10, color="#38BDF8", line=dict(width=1.5, color="#FFFFFF")),
+        hovertemplate=(
+            "<b>Matchweek %{x}</b><br>vs " + team_matches["Opponent"] + " (" + team_matches["Venue"] + ")<br>" +
+            f"{metric_label}: <b>%{{y:.2f}}</b><extra></extra>"
+        ) if lang == "EN" else (
+            "<b>Kolejka %{x}</b><br>vs " + team_matches["Opponent"] + " (" + team_matches["Venue"] + ")<br>" +
+            f"{metric_label}: <b>%{{y:.2f}}</b><extra></extra>"
+        )
+    ))
+    
+    fig_tr.add_hline(
+        y=league_avg,
+        line_dash="dot",
+        line_color="#94A3B8",
+        line_width=1.8,
+        annotation_text=f"Średnia ligowa / League Avg: {league_avg:.2f}",
+        annotation_position="bottom right"
+    )
+    
+    fig_tr.update_layout(
+        height=440,
+        template="plotly_dark",
+        paper_bgcolor="#0E1117",
+        plot_bgcolor="#161B22",
+        title=dict(
+            text=f"<b>{selected_trend_team} – {metric_label} (Mecz po meczu)</b>" if lang == "PL" else f"<b>{selected_trend_team} – {metric_label} (Match-by-Match Trend)</b>",
+            font=dict(size=15, color="#FFFFFF"),
+            x=0.03, y=0.95
+        ),
+        xaxis=dict(
+            title="Numer Kolejki" if lang == "PL" else "Matchweek",
+            dtick=1,
+            showgrid=True,
+            gridcolor="#30363D"
+        ),
+        yaxis=dict(
+            title=yaxis_title,
+            showgrid=True,
+            gridcolor="#30363D"
+        ),
+        margin=dict(l=60, r=40, t=50, b=40)
+    )
+    
+    st.plotly_chart(fig_tr, use_container_width=True)        
+
 # =========================================================================
 # WYBÓR LIGI I DYNAMICZNE WCZYTANIE DANYCH
 # =========================================================================
@@ -1360,9 +1429,6 @@ with tab_ogolne:
         st.dataframe(display_df[ogolne_cols], use_container_width=True, hide_index=True, column_config=common_col_config)
 
 
-# =========================================================================
-# TAB 2: STATYSTYKI OFENSYWNE (PL / EN)
-# =========================================================================
 with tab_ofensywa:
     ofensywa_widok = st.selectbox(
         t("att_select"),
@@ -1387,25 +1453,7 @@ with tab_ofensywa:
             df=team_stats, col_name="xG_na_mecz", title_chart="Total Expected Goals (xG) Rankings",
             title_paper="Total xG Rankings", value_header="xG / 90", color_scale="Blues"
         )
-        st.markdown("---")
-        team_list = sorted(team_stats["Team"].unique().tolist())
-        selected_line_team = st.selectbox("Select team for trend analysis:" if selected_lang == "EN" else "Wybierz drużynę do analizy serii bramkowej:", team_list, index=0)
-        team_matches = matches_df[matches_df["Team"] == selected_line_team].copy().reset_index(drop=True)
-        team_matches["Kolejka"] = team_matches.index + 1
-        
-        fig_trend = go.Figure()
-        fig_trend.add_trace(go.Scatter(
-            x=team_matches["Kolejka"], y=team_matches["xG_For"], mode="lines+markers",
-            name="Created xG" if selected_lang == "EN" else "Utworzone xG",
-            line=dict(color="#38BDF8", width=3), marker=dict(size=11, color="#38BDF8")
-        ))
-        league_avg_xg = team_stats["xG_na_mecz"].mean()
-        fig_trend.add_hline(
-            y=league_avg_xg, line_dash="dot", line_color="#94A3B8", line_width=2,
-            annotation_text=f"{t('league_avg')}: {league_avg_xg:.2f} xG", annotation_position="bottom right"
-        )
-        fig_trend.update_layout(height=460, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22", xaxis=dict(title="Matchweek" if selected_lang == "EN" else "Numer Kolejki", dtick=1), yaxis=dict(title="xG"))
-        st.plotly_chart(fig_trend, use_container_width=True)
+        render_metric_trend_chart(matches_df, team_stats, "xG_For", "xG_na_mecz", "Expected Goals (xG)", "xG")
 
     # 3. xG Open Play
     elif ofensywa_widok == t("att_opt3"):
@@ -1414,6 +1462,7 @@ with tab_ofensywa:
             df=team_stats, col_name="xG_OP_na_mecz", title_chart="Open Play xG Rankings",
             title_paper="Open Play xG Rankings", value_header="xG OP / 90", color_scale="Greens"
         )
+        render_metric_trend_chart(matches_df, team_stats, "xG_OP_For", "xG_OP_na_mecz", "Open Play xG", "xG OP")
 
     # 4. xG Set Play
     elif ofensywa_widok == t("att_opt4"):
@@ -1422,6 +1471,7 @@ with tab_ofensywa:
             df=team_stats, col_name="xG_SP_na_mecz", title_chart="Set Play xG Rankings",
             title_paper="Set Play xG Rankings", value_header="SP xG / 90", color_scale="Oranges"
         )
+        render_metric_trend_chart(matches_df, team_stats, "xG_SP_For", "xG_SP_na_mecz", "Set Play xG", "SP xG")
 
     # 5. npxG
     elif ofensywa_widok == t("att_opt5"):
@@ -1430,6 +1480,7 @@ with tab_ofensywa:
             df=team_stats, col_name="npxG_na_mecz", title_chart="Non-Penalty xG Rankings",
             title_paper="Non-Penalty xG Rankings", value_header="npxG / 90", color_scale="Purples"
         )
+        render_metric_trend_chart(matches_df, team_stats, "npxG_For", "npxG_na_mecz", "Non-Penalty xG", "npxG")
 
     # 6. xGOT
     elif ofensywa_widok == t("att_opt6"):
@@ -1438,6 +1489,7 @@ with tab_ofensywa:
             df=team_stats, col_name="xGOT_na_mecz", title_chart="Expected Goals on Target (xGOT) Rankings",
             title_paper="xGOT Rankings", value_header="xGOT / 90", color_scale="Tealgrn"
         )
+        render_metric_trend_chart(matches_df, team_stats, "xGOT_For", "xGOT_na_mecz", "xGOT on Target", "xGOT")
 
     # 7. xG / Shot
     elif ofensywa_widok == t("att_opt7"):
@@ -1446,6 +1498,10 @@ with tab_ofensywa:
             df=team_stats, col_name="xG_na_strzal", title_chart="Expected Goals per Shot (xG/Shot) Rankings",
             title_paper="xG per Shot Rankings", value_header="xG / Shot", color_scale="Viridis"
         )
+        # Obliczenie xG / Shot w locie na mecz
+        matches_df_temp = matches_df.copy()
+        matches_df_temp["xG_Shot_Match"] = (matches_df_temp["xG_For"] / matches_df_temp["Shots"]).fillna(0).round(3)
+        render_metric_trend_chart(matches_df_temp, team_stats, "xG_Shot_Match", "xG_na_strzal", "xG / Shot", "xG / Shot")
 
     # 8. xG / Goal
     elif ofensywa_widok == t("att_opt8"):
@@ -1455,6 +1511,9 @@ with tab_ofensywa:
             title_paper="xG / Goal Rankings", value_header="xG / 1 Gol" if selected_lang == "PL" else "xG / 1 Goal",
             color_scale="RdYlGn_r", sort_asc=False
         )
+        matches_df_temp = matches_df.copy()
+        matches_df_temp["xG_Goal_Match"] = matches_df_temp.apply(lambda r: round(r["xG_For"] / r["Goals_For"], 2) if r["Goals_For"] > 0 else 0.0, axis=1)
+        render_metric_trend_chart(matches_df_temp, team_stats, "xG_Goal_Match", "xG_na_gola", "xG / Goal", "xG / Gol")
 
     # 9. SoT / Goal
     elif ofensywa_widok == t("att_opt9"):
@@ -1464,6 +1523,9 @@ with tab_ofensywa:
             title_paper="SoT / Goal Rankings", value_header="SoT / Goal" if selected_lang == "EN" else "SoT / 1 Gol",
             color_scale="RdYlGn_r", sort_asc=True
         )
+        matches_df_temp = matches_df.copy()
+        matches_df_temp["SoT_Goal_Match"] = matches_df_temp.apply(lambda r: round(r["Shots_On_Target"] / r["Goals_For"], 2) if r["Goals_For"] > 0 else 0.0, axis=1)
+        render_metric_trend_chart(matches_df_temp, team_stats, "SoT_Goal_Match", "Celne_na_gola", "Celne na gola (SoT/Goal)", "SoT / Gol")
 
     # 10. Gole - xG
     elif ofensywa_widok == t("att_opt10"):
@@ -1474,7 +1536,9 @@ with tab_ofensywa:
             value_header="Goals - xG" if selected_lang == "EN" else "Gole - xG",
             color_scale="RdYlGn", sort_asc=False
         )
-
+        matches_df_temp = matches_df.copy()
+        matches_df_temp["Delta_xG_Match"] = (matches_df_temp["Goals_For"] - matches_df_temp["xG_For"]).round(2)
+        render_metric_trend_chart(matches_df_temp, team_stats, "Delta_xG_Match", "Gole_na_mecz", "Gole - xG (Delta meczowa)", "Delta")
 
     # 11. Box Shots
     elif ofensywa_widok == t("att_opt11"):
@@ -1484,6 +1548,7 @@ with tab_ofensywa:
             title_paper="Shots Inside Box Rankings", value_header="Box Shots / 90" if selected_lang == "EN" else "Strzały w polu / 90",
             color_scale="Blues", sort_asc=False
         )
+        render_metric_trend_chart(matches_df, team_stats, "Box_Shots", "Strzaly_z_pola_karnego", "Strzały z pola karnego", "Strzały")
 
     # 12. Outside Box Shots
     elif ofensywa_widok == t("att_opt12"):
@@ -1493,8 +1558,7 @@ with tab_ofensywa:
             title_paper="Shots Outside Box Rankings", value_header="Outside Shots / 90" if selected_lang == "EN" else "Strzały z dystansu / 90",
             color_scale="Purples", sort_asc=False
         )
-
-        
+        render_metric_trend_chart(matches_df, team_stats, "Outside_Box_Shots", "Strzaly_zza_pola_karnego", "Strzały zza pola karnego", "Strzały")
 
     # 13. Rozkład xG: Open Play vs Set Play
     elif ofensywa_widok == t("att_opt13"):
@@ -1509,6 +1573,7 @@ with tab_ofensywa:
         fig_dist.add_trace(go.Bar(y=dist_df["Team"], x=dist_df["Karne_Inne_xG"], name="Penalties / Other" if selected_lang == "EN" else "Karne / Inne", orientation='h', marker=dict(color="#94A3B8")))
         fig_dist.update_layout(barmode='stack', height=620, template="simple_white", paper_bgcolor="#FFFFFF", plot_bgcolor="#F8FAFC", title=dict(text="<b>xG Breakdown</b>", x=0.04, y=0.96, font=dict(color="#0F172A")), xaxis=dict(title="xG / 90"), yaxis=dict(tickfont=dict(color="#0F172A")), margin=dict(l=120, r=30, t=65, b=40))
         st.plotly_chart(fig_dist, use_container_width=True)
+        render_metric_trend_chart(matches_df, team_stats, "xG_OP_For", "xG_OP_na_mecz", "Open Play xG", "xG OP")
 
     # 14. Celność strzałów
     elif ofensywa_widok == t("att_opt14"):
@@ -1518,6 +1583,9 @@ with tab_ofensywa:
             title_paper="Shot Accuracy Rankings", value_header="Accuracy %" if selected_lang == "EN" else "Celność %",
             color_scale="Blues", sort_asc=False
         )
+        matches_df_temp = matches_df.copy()
+        matches_df_temp["Shot_Acc_Match"] = ((matches_df_temp["Shots_On_Target"] / matches_df_temp["Shots"]) * 100).fillna(0).round(1)
+        render_metric_trend_chart(matches_df_temp, team_stats, "Shot_Acc_Match", "Celnosc_strzalow_proc", "Celność Strzałów (%)", "Celność %")
 
     # 15. Big Chances
     elif ofensywa_widok == t("att_opt15"):
@@ -1541,6 +1609,7 @@ with tab_ofensywa:
             ))
             fig_bcm.update_layout(height=520, template="simple_white", yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig_bcm, use_container_width=True)
+        render_metric_trend_chart(matches_df, team_stats, "Big_Chances", "Big_Chances", "Big Chances (Wielkie Szanse)", "Szanse")
 
     # 16. Matryca Skuteczności
     elif ofensywa_widok == t("att_opt16"):
@@ -1557,6 +1626,7 @@ with tab_ofensywa:
             ))
         fig_matrix.update_layout(height=600, template="plotly_dark", xaxis=dict(title="xG / 90"), yaxis=dict(title="xG / Goal", autorange="reversed"))
         st.plotly_chart(fig_matrix, use_container_width=True)
+        render_metric_trend_chart(matches_df, team_stats, "xG_For", "xG_na_mecz", "xG na mecz", "xG")
 
     # 17. xG vs xGOT
     elif ofensywa_widok == t("att_opt17"):
@@ -1564,6 +1634,7 @@ with tab_ofensywa:
         fig_rel = px.scatter(team_stats, x="xG_na_mecz", y="xGOT_na_mecz", text="Team", template="plotly_dark", height=580)
         fig_rel.update_traces(textposition="top center", marker=dict(size=12, color="#10B981"))
         st.plotly_chart(fig_rel, use_container_width=True)
+        render_metric_trend_chart(matches_df, team_stats, "xGOT_For", "xGOT_na_mecz", "xGOT (Strzały w bramkę)", "xGOT")
 
     # 18. Kontakty vs Strzały
     elif ofensywa_widok == t("att_opt18"):
@@ -1571,6 +1642,7 @@ with tab_ofensywa:
         fig_box = px.scatter(team_stats, x="Kontakty_w_polu_karnym", y="Strzaly_z_pola_karnego", text="Team", template="plotly_dark", height=580)
         fig_box.update_traces(textposition="top center", marker=dict(size=12, color="#38BDF8"))
         st.plotly_chart(fig_box, use_container_width=True)
+        render_metric_trend_chart(matches_df, team_stats, "Box_Touches", "Box_Touches_Mean", "Kontakty w polu karnym", "Kontakty")
 
     # 19. Strzały potrzebne na gola
     elif ofensywa_widok == t("att_opt19"):
@@ -1598,6 +1670,7 @@ with tab_ofensywa:
             margin=dict(l=120, r=40, t=55, b=55)
         )
         st.plotly_chart(fig_eff, use_container_width=True)
+        render_metric_trend_chart(matches_df, team_stats, "Shots", "Strzaly_na_mecz", "Oddane Strzały", "Strzały")
 
     # 20. xGOT vs Bramki
     elif ofensywa_widok == t("att_opt20"):
@@ -1605,6 +1678,7 @@ with tab_ofensywa:
         fig_xgot = px.scatter(team_stats, x="xGOT_Suma", y="Gole_Strzelone", text="Team", template="plotly_dark", height=560)
         fig_xgot.update_traces(textposition="top center", marker=dict(size=12, color="#AF7AC5"))
         st.plotly_chart(fig_xgot, use_container_width=True)
+        render_metric_trend_chart(matches_df, team_stats, "Goals_For", "Gole_na_mecz", "Bramki Zdobyte", "Gole")
 
 # =========================================================================
 # TAB 3: STATYSTYKI DEFENSYWNE (PL / EN)
