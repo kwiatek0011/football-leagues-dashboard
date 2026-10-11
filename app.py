@@ -1230,13 +1230,14 @@ display_df[float_cols] = display_df[float_cols].round(2)
 display_df.columns = [col.replace("_", " ") for col in display_df.columns]
 
 # Zakładki
-tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h,tab_zaleznosci = st.tabs([
+tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h, tab_analiza_ligowa, tab_zaleznosci = st.tabs([
     t("tab_general"),
     t("tab_offense"), 
     t("tab_defense"),
     t("tab_passing"),
     t("tab_teams"),
     t("tab_h2h"),
+    " Analiza Ligowa AI" if selected_lang == "PL" else " League AI Scout",
     t("tab_insights"),
     
 ]) 
@@ -3971,6 +3972,204 @@ with tab_h2h:
         st.markdown(f"**Wytyczne dla: {team_b}**")
         for i, directive in enumerate(plan_b, 1):
             st.warning(f"**{i}.** {directive}")
+
+
+# =========================================================================
+# NOWA ZAKŁADKA: LIGOWY DETEKTOR TRENDÓW I ANOMALII AI
+# =========================================================================
+with tab_analiza_ligowa:
+    st.header(" Ligowy Detektor Trendów & Analiza Stylów AI" if selected_lang == "PL" else " League-Wide Trend Detector & Tactical Intelligence")
+    st.caption(
+        "Wybierz dowolną metrykę, aby algorytm zanalizował całą stawkę ligową: wykrył dynamikę formy (wzrosty/spadki kolejka po kolejce) oraz podzielił ligę na profile efektywności."
+        if selected_lang == "PL" else
+        "Select any metric to analyze the entire league: detect momentum (match-by-match slopes/trends) and performance tier categorizations."
+    )
+
+    # 1. Baza metryk do wyboru: (Nazwa PL, Nazwa EN, Kolumna meczowa, Kolumna ligowa, Czy mniej=lepiej)
+    LEAGUE_METRICS_REGISTRY = [
+        ("xG z Gry Otwartej (Open Play)", "Open Play xG", "xG_OP_For", "xG_OP_na_mecz", False),
+        ("xG ze Stałych Fragmentów (SFG)", "Set Play xG", "xG_SP_For", "xG_SP_na_mecz", False),
+        ("Ogólne xG (Kreacja Zagrożenia)", "Total xG Created", "xG_For", "xG_na_mecz", False),
+        ("Dopuszczone xGA (Jakość szans rywala)", "Conceded xGA", "xG_Against", "xGA_na_mecz", True),
+        ("xGA z Gry Otwartej", "Open Play xGA Conceded", "xG_OP_Against", "xGA_OP_na_mecz", True),
+        ("xGA ze Stałych Fragmentów", "Set Play xGA Conceded", "xG_SP_Against", "xGA_SP_na_mecz", True),
+        ("Strzały z Pola Karnego", "Box Shots", "Box_Shots", "Strzaly_z_pola_karnego", False),
+        ("Kontakty w Szesnastce Rywala", "Box Touches", "Box_Touches", "Box_Touches_Mean", False),
+        ("Posiadanie Piłki (%)", "Ball Possession (%)", "Possession", "Posiadanie", False),
+        ("Podania na Połowie Rywala", "Opponent Half Passes", "Passes_Opp_Half", "Passes_Opp_Half_Mean", False),
+        ("Celne Długie Piłki", "Accurate Long Balls", "Long_Balls", "Long_Balls_Mean", False),
+        ("Wygrane Pojedynki", "Duels Won", "Duels_Won", "Pojedynki_Wygrane", False),
+        ("Faule Popełnione", "Fouls Committed", "Fouls", "Fouls_Mean", True),
+    ]
+
+    metric_names = [m[0] if selected_lang == "PL" else m[1] for m in LEAGUE_METRICS_REGISTRY]
+    
+    col_sel_met, col_sel_trend_scope = st.columns([2.2, 1.2])
+    with col_sel_met:
+        selected_league_metric_name = st.selectbox(
+            "Wybierz wskaźnik do przeskanowania ligi:" if selected_lang == "PL" else "Select metric to scan the league:",
+            metric_names,
+            index=0,
+            key="sb_league_ai_metric_sel"
+        )
+    with col_sel_trend_scope:
+        trend_window = st.slider(
+            "Zakres ostatnich meczów do badania pędu (momentum):" if selected_lang == "PL" else "Recent matches window for momentum:",
+            min_value=3, max_value=8, value=5, step=1,
+            key="slider_trend_window"
+        )
+
+    # Odnalezienie konfiguracji metryki
+    sel_idx_metric = metric_names.index(selected_league_metric_name)
+    m_pl, m_en, m_match_col, m_stat_col, lower_is_better = LEAGUE_METRICS_REGISTRY[sel_idx_metric]
+
+    # 2. Obliczenia pędu (Momentum & Trend Slopes) dla każdego klubu w lidze
+    trend_results = []
+    
+    for team_name in team_stats["Team"].unique():
+        t_sub = matches_df[matches_df["Team"] == team_name].copy().reset_index(drop=True)
+        if len(t_sub) >= 3 and m_match_col in t_sub.columns:
+            # Badamy ostatnie N meczów
+            recent_matches = t_sub.tail(trend_window).copy()
+            y_vals = recent_matches[m_match_col].values
+            x_vals = np.arange(len(y_vals))
+            
+            # Nachylenie linii trendu (współczynnik kierunkowy a: Y = aX + b)
+            if len(y_vals) > 1 and np.var(x_vals) > 0:
+                slope, _ = np.polyfit(x_vals, y_vals, 1)
+            else:
+                slope = 0.0
+                
+            curr_avg = y_vals.mean()
+            season_avg = t_sub[m_match_col].mean()
+            delta_recent = curr_avg - season_avg
+            
+            trend_results.append({
+                "Team": team_name,
+                "Slope": round(slope, 3),
+                "Recent_Avg": round(curr_avg, 2),
+                "Season_Avg": round(season_avg, 2),
+                "Recent_Delta": round(delta_recent, 2),
+                "Recent_Values": y_vals.tolist()
+            })
+
+    df_trends = pd.DataFrame(trend_results)
+
+    # 3. Podział na kategorie trendu AI
+    # Jeśli mniej=lepiej (np. xGA), to ujemny slope jest sukcesem (obrona się poprawia)
+    if lower_is_better:
+        rising_teams = df_trends.sort_values(by="Slope", ascending=True).head(3)  # spada xGA = poprawa
+        declining_teams = df_trends.sort_values(by="Slope", ascending=False).head(3) # rośnie xGA = kryzys
+    else:
+        rising_teams = df_trends.sort_values(by="Slope", ascending=False).head(3) # rośnie xG = poprawa
+        declining_teams = df_trends.sort_values(by="Slope", ascending=True).head(3) # spada xG = regres
+
+    st.markdown("---")
+    st.markdown("### 📈 Raport Pędu Formy AI: Kto Notuje Progres, a Kto Zjazd?" if selected_lang == "PL" else "### 📈 AI Momentum Report: Surging vs Declining Teams")
+    
+    col_surge, col_slump = st.columns(2)
+
+    with col_surge:
+        st.markdown(
+            f"""<div style="background-color: #161B22; border-left: 4px solid #10B981; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
+                <span style="font-weight: 800; color: #10B981; font-size: 15px;">🚀 Największy Progres z Meczu na Mecz (Ostatnie {trend_window} gier)</span>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        for _, r in rising_teams.iterrows():
+            arrow = "📈" if r["Slope"] > 0 else "📉"
+            sl_text = f"+{r['Slope']:.2f} / mecz" if r["Slope"] > 0 else f"{r['Slope']:.2f} / mecz"
+            st.markdown(
+                f"""<div style="background-color: #0E1117; border: 1px solid #30363D; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
+                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#FFFFFF;">
+                        <span>{r['Team']}</span>
+                        <span style="color:#10B981;">{arrow} Wzrost ({sl_text})</span>
+                    </div>
+                    <div style="font-size:12px; color:#94A3B8; margin-top:4px;">
+                        Średnia z {trend_window} m.: <b style="color:#FFFFFF;">{r['Recent_Avg']}</b> (w sezonie: {r['Season_Avg']} | delta: <b style="color:#10B981;">{r['Recent_Delta']:+.2f}</b>)
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+
+    with col_slump:
+        st.markdown(
+            f"""<div style="background-color: #161B22; border-left: 4px solid #EF4444; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
+                <span style="font-weight: 800; color: #EF4444; font-size: 15px;">⚠️ Największe Tąpnięcie / Regres Formy (Ostatnie {trend_window} gier)</span>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        for _, r in declining_teams.iterrows():
+            arrow = "📉" if r["Slope"] < 0 else "📈"
+            sl_text = f"{r['Slope']:.2f} / mecz" if r["Slope"] < 0 else f"+{r['Slope']:.2f} / mecz"
+            st.markdown(
+                f"""<div style="background-color: #0E1117; border: 1px solid #30363D; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
+                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#FFFFFF;">
+                        <span>{r['Team']}</span>
+                        <span style="color:#EF4444;">{arrow} Regres ({sl_text})</span>
+                    </div>
+                    <div style="font-size:12px; color:#94A3B8; margin-top:4px;">
+                        Średnia z {trend_window} m.: <b style="color:#FFFFFF;">{r['Recent_Avg']}</b> (w sezonie: {r['Season_Avg']} | delta: <b style="color:#EF4444;">{r['Recent_Delta']:+.2f}</b>)
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+
+    # 4. Wykres Sparklines / Liniowy porównujący trendy w lidze
+    st.markdown("---")
+    st.markdown(f"#####  Zestawienie Średniej Sezonowej ze Średnią Ostatnich {trend_window} Meczów")
+    
+    df_plot_comp = df_trends.sort_values(by="Recent_Avg", ascending=False).reset_index(drop=True)
+    
+    fig_comp = go.Figure()
+    fig_comp.add_trace(go.Bar(
+        name=f"Ostatnie {trend_window} meczów",
+        x=df_plot_comp["Team"],
+        y=df_plot_comp["Recent_Avg"],
+        marker_color="#38BDF8",
+        text=[f"{v:.2f}" for v in df_plot_comp["Recent_Avg"]],
+        textposition="outside"
+    ))
+    fig_comp.add_trace(go.Bar(
+        name="Średnia z całego sezonu",
+        x=df_plot_comp["Team"],
+        y=df_plot_comp["Season_Avg"],
+        marker_color="#475569",
+        text=[f"{v:.2f}" for v in df_plot_comp["Season_Avg"]],
+        textposition="outside"
+    ))
+    
+    fig_comp.update_layout(
+        barmode="group",
+        height=480,
+        template="plotly_dark",
+        paper_bgcolor="#0E1117",
+        plot_bgcolor="#161B22",
+        xaxis=dict(tickangle=-40),
+        yaxis=dict(title=selected_league_metric_name),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_comp, use_container_width=True)
+
+    # 5. Podział ligi na 4 Tiery Jakościowe (Elita, Solidni, Przeciętniacy, Strefa Alarmowa)
+    st.markdown("---")
+    st.markdown("#####  Podział Ligi na Tiery Jakościowe AI (Rozkład Statystyczny)")
+    
+    q75 = team_stats[m_stat_col].quantile(0.75)
+    q50 = team_stats[m_stat_col].median()
+    q25 = team_stats[m_stat_col].quantile(0.25)
+    
+    tier_elita = team_stats[team_stats[m_stat_col] >= q75]["Team"].tolist() if not lower_is_better else team_stats[team_stats[m_stat_col] <= q25]["Team"].tolist()
+    tier_srednia = team_stats[(team_stats[m_stat_col] < q75) & (team_stats[m_stat_col] >= q50)]["Team"].tolist() if not lower_is_better else team_stats[(team_stats[m_stat_col] > q25) & (team_stats[m_stat_col] <= q50)]["Team"].tolist()
+    tier_zagrozenie = team_stats[team_stats[m_stat_col] < q25]["Team"].tolist() if not lower_is_better else team_stats[team_stats[m_stat_col] > q75]["Team"].tolist()
+
+    c_t1, c_t2, c_t3 = st.columns(3)
+    with c_t1:
+        st.success(f" **Elita Ligowa (Top 25%):**\n\n" + ", ".join(tier_elita))
+    with c_t2:
+        st.info(f" **Górna Połowa Tabeli:**\n\n" + ", ".join(tier_srednia))
+    with c_t3:
+        st.error(f" **Strefa Problemowa (Dolne 25%):**\n\n" + ", ".join(tier_zagrozenie))
 
 # =========================================================================
 # TAB 6: PRACOWNIA ZALEŻNOŚCI (PL / EN)
