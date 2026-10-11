@@ -3631,22 +3631,22 @@ with tab_h2h:
     st.plotly_chart(fig_radar, use_container_width=True)
 
     # =========================================================
-    # MODUŁ: MATRYCA PRZEWAG (ATAK VS OBRONA) & 3 KLUCZE DO ZWYCIĘSTWA
+    # =========================================================
+    # MODUŁ: MATRYCA PRZEWAG (ATAK VS OBRONA) & DYNAMICZNE KLUCZE
     # =========================================================
     st.markdown("---")
     st.subheader(
         " Tactical Matchup Matrix & Pre-Match Game Plan"
         if selected_lang == "EN"
-        else " Matryca Zderzenia Formacji & 3 Klucze do Zwycięstwa"
+        else " Matryca Zderzenia Formacji & Wytyczne Taktyczne AI"
     )
     st.caption(
-        "Cross-analysis of Team A offense vs Team B defense (and vice versa) with algorithmic coaching directives."
+        "Dynamic pre-match directives generated based on statistical mismatches between both teams."
         if selected_lang == "EN"
-        else "Krzyżowe zestawienie ataku z obroną rywala oraz algorytmiczne wytyczne taktyczne dla obu sztabów szkoleniowych."
+        else "Dynamiczne wytyczne przedmeczowe generowane automatycznie na podstawie wykrytych dysproporcji i słabości rywala."
     )
 
     # 1. Obliczenia krzyżowe (Atak A vs Obrona B oraz Atak B vs Obrona A)
-    # Metryki: (Nazwa PL, Nazwa EN, Kolumna Ataku, Kolumna Obrony, Mnożnik/Typ)
     clash_dimensions = [
         ("Atak Pozycyjny (Open Play)", "Open Play Threat", "xG_OP_na_mecz", "xGA_OP_na_mecz"),
         ("Stałe Fragmenty Gry (SFG)", "Set Piece Threat", "xG_SP_na_mecz", "xGA_SP_na_mecz"),
@@ -3654,25 +3654,16 @@ with tab_h2h:
         ("Kontrola i Terytorium", "Territorial Grip", "Passes_Opp_Half_Mean", "Passes_Opp_Half_Against_Mean"),
     ]
 
-    # Zderzenie 1: Atak Team A vs Obrona Team B
-    # Zderzenie 2: Atak Team B vs Obrona Team A
     matchup_rows = []
-    keys_team_a = []
-    keys_team_b = []
-
     for name_pl, name_en, att_col, def_col in clash_dimensions:
         dim_name = name_en if selected_lang == "EN" else name_pl
+        val_att_a = float(row_a.get(att_col, 0.0))
+        val_def_b = float(row_b.get(def_col, 0.0))
+        val_att_b = float(row_b.get(att_col, 0.0))
+        val_def_a = float(row_a.get(def_col, 0.0))
         
-        # Starcie 1: A atakuje, B broni
-        val_att_a = float(row_a[att_col])
-        val_def_b = float(row_b[def_col])
         std_att = team_stats[att_col].std() if team_stats[att_col].std() > 0 else 1.0
-        # Wskaźnik przewagi (im wyższy atak A i gorsza obrona B, tym większa luka)
         mismatch_a = (val_att_a - team_stats[att_col].mean()) / std_att + (val_def_b - team_stats[def_col].mean()) / std_att
-
-        # Starcie 2: B atakuje, A broni
-        val_att_b = float(row_b[att_col])
-        val_def_a = float(row_a[def_col])
         mismatch_b = (val_att_b - team_stats[att_col].mean()) / std_att + (val_def_a - team_stats[def_col].mean()) / std_att
 
         matchup_rows.append({
@@ -3685,32 +3676,7 @@ with tab_h2h:
             "edge_b": mismatch_b,
         })
 
-        # Generowanie reguł dla Kluczy do Zwycięstwa
-        if "Open Play" in dim_name or "Pozycyjny" in dim_name:
-            if mismatch_a > 0.6:
-                keys_team_a.append(f"Wykorzystać słabość rywala w obronie pozycyjnej (dopuszcza aż {val_def_b:.2f} xGA OP). Rozciągać grę w ataku.")
-            else:
-                keys_team_b.append(f"Zagęścić środek pola: {team_a} generuje w grze otwartej {val_att_a:.2f} xG na mecz.")
-
-        if "Set Piece" in dim_name or "Stałe" in dim_name:
-            if mismatch_a > 0.5:
-                keys_team_a.append(f"Polować na stałe fragmenty gry: {team_b} dopuszcza po SFG wysokie {val_def_b:.2f} xGA.")
-            if mismatch_b > 0.5:
-                keys_team_b.append(f"Szukać rzutów rożnych i wolnych: defensywa {team_a} traci z SFG średnio {val_def_a:.2f} xGA.")
-
-        if "Box" in dim_name or "Szesnastk" in dim_name:
-            if val_att_a > val_def_b:
-                keys_team_a.append(f"Dostarczać piłki w pole karne: średnia {val_att_a:.1f} strzałów z pola przewyższa opór rywala ({val_def_b:.1f}).")
-            if val_att_b > val_def_a:
-                keys_team_b.append(f"Szybko finalizować w szesnastce: {team_a} dopuszcza z pola karnego {val_def_a:.1f} uderzeń.")
-
-    # Uzupełnienie kluczy jeśli jest ich za mało
-    if len(keys_team_a) < 3:
-        keys_team_a.append(f"Presować niskie rozegranie: rywal wykonuje {float(row_b.get('Passes_Own_Half_Mean', 0)):.0f} podań na własnej połowie.")
-    if len(keys_team_b) < 3:
-        keys_team_b.append(f"Wytrzymać fizycznie w starciach 1 na 1 (rywal notuje {float(row_a.get('Pojedynki_Wygrane', 0)):.0f} wygranych pojedynków).")
-
-    # Renderowanie 2 kolumn: Karty zderzeń formacji
+    # Renderowanie kart zderzeń formacji
     col_clash_1, col_clash_2 = st.columns(2)
 
     with col_clash_1:
@@ -3721,7 +3687,6 @@ with tab_h2h:
             unsafe_allow_html=True
         )
         for m in matchup_rows:
-            delta = m["att_a"] - m["def_b"]
             kolor_paska = "#10B981" if m["edge_a"] > 0.4 else ("#EF4444" if m["edge_a"] < -0.4 else "#38BDF8")
             status_txt = "Zdecydowana przewaga ataku" if m["edge_a"] > 0.4 else ("Szczelny mur obrony" if m["edge_a"] < -0.4 else "Wyrównany bój")
             st.markdown(
@@ -3762,26 +3727,81 @@ with tab_h2h:
                 unsafe_allow_html=True
             )
 
-    # 2. Blok: 3 Klucze do Zwycięstwa (Odprawa Trenerska)
+    # =========================================================
+    # SILNIK DYNAMICZNYCH WYTYCZNYCH TAKTYCZNYCH (BRAK SZTYWNYCH LIMITÓW)
+    # =========================================================
+    def build_dynamic_gameplan(team_target, team_opp, r_target, r_opp):
+        plan = []
+
+        # 1. Słabości rywala po stałych fragmentach (Szansa w ataku)
+        if float(r_opp.get("xGA_SP_na_mecz", 0)) >= team_stats["xGA_SP_na_mecz"].quantile(0.65):
+            plan.append(f"Szukać rzutów rożnych i wolnych: {team_opp} traci po SFG aż {float(r_opp.get('xGA_SP_na_mecz', 0)):.2f} xGA na mecz (jeden ze słabszych wyników w lidze).")
+
+        # 2. Własne braki przy SFG (Zagrożenie w obronie)
+        if float(r_target.get("xGA_SP_na_mecz", 0)) >= team_stats["xGA_SP_na_mecz"].quantile(0.65) and float(r_opp.get("xG_SP_na_mecz", 0)) >= team_stats["xG_SP_na_mecz"].median():
+            plan.append(f"Maksymalna koncentracja przy obronie SFG: dopuszczacie {float(r_target.get('xGA_SP_na_mecz', 0)):.2f} xGA, a {team_opp} kreuje ze stałych fragmentów groźne {float(r_opp.get('xG_SP_na_mecz', 0)):.2f} xG.")
+
+        # 3. Przestrzeń w szesnastce
+        if float(r_target.get("Strzaly_z_pola_karnego", 0)) > float(r_opp.get("Box_Shots_Against_Mean", 0)):
+            plan.append(f"Wstrzeliwać piłki w pole karne: średnia {float(r_target.get('Strzaly_z_pola_karnego', 0)):.1f} uderzeń z szesnastki przewyższa opór rywala ({float(r_opp.get('Box_Shots_Against_Mean', 0)):.1f}).")
+        if float(r_opp.get("Box_Shots_Against_Mean", 0)) >= team_stats["Box_Shots_Against_Mean"].quantile(0.70):
+            plan.append(f"Intensywna obecność w polu karnym: defensywa rywala dopuszcza aż {float(r_opp.get('Box_Shots_Against_Mean', 0)):.1f} strzałów z bliska na mecz.")
+
+        # 4. Zagrożenie ze strony ataku rywala z szesnastki
+        if float(r_opp.get("Strzaly_z_pola_karnego", 0)) >= team_stats["Strzaly_z_pola_karnego"].quantile(0.75):
+            plan.append(f"Odciąć dośrodkowania i podania prostopadłe: {team_opp} oddaje z szesnastki aż {float(r_opp.get('Strzaly_z_pola_karnego', 0)):.1f} strzału na mecz.")
+
+        # 5. Rozegranie od tyłu a pressing
+        opp_own_half_p = float(r_opp.get("Passes_Own_Half_Mean", 0))
+        if opp_own_half_p >= team_stats["Passes_Own_Half_Mean"].quantile(0.70):
+            plan.append(f"Wysoki pressing na stoperach: {team_opp} buduje ataki cierpliwie od tyłu ({opp_own_half_p:.0f} podań na własnej połowie).")
+        elif opp_own_half_p <= team_stats["Passes_Own_Half_Mean"].quantile(0.30):
+            plan.append(f"Uwaga na drugą piłkę i wertykalne podania: {team_opp} gra bezpośrednio i szybko omija własną połowę.")
+
+        # 6. Pojedynki i fizyczność
+        duels_diff = float(r_opp.get("Pojedynki_Wygrane", 0)) - float(r_target.get("Pojedynki_Wygrane", 0))
+        if duels_diff >= 4.0:
+            plan.append(f"Unikać twardej walki 1 na 1 i przyspieszać grę na 1-2 kontakty: {team_opp} wygrywa fizycznie o {duels_diff:+.1f} pojedynków na mecz więcej.")
+        elif duels_diff <= -4.0:
+            plan.append(f"Narzucić twarde warunki fizyczne: posiadacie przewagę w wygranych pojedynkach ({float(r_target.get('Pojedynki_Wygrane', 0)):.1f} vs {float(r_opp.get('Pojedynki_Wygrane', 0)):.1f}).")
+
+        # 7. Dyscyplina / Faule i kartki
+        if float(r_opp.get("Fouls_Mean", 0)) >= team_stats["Fouls_Mean"].quantile(0.75):
+            plan.append(f"Prowokować przewinienia dryblingiem w strefie 20-30m: {team_opp} gra bardzo agresywnie i fauluje średnio {float(r_opp.get('Fouls_Mean', 0)):.1f} razy na mecz.")
+        if float(r_target.get("Fouls_Mean", 0)) >= team_stats["Fouls_Mean"].quantile(0.75):
+            plan.append(f"Ostrożność w odbiorze: popełniacie średnio {float(r_target.get('Fouls_Mean', 0)):.1f} faulu na mecz, co grozi niepotrzebnymi rzutami wolnymi.")
+
+        # 8. Strzały z dystansu
+        if float(r_opp.get("Outside_Box_Shots_Against_Mean", 0)) >= team_stats["Outside_Box_Shots_Against_Mean"].quantile(0.70):
+            plan.append(f"Szukać uderzeń zza pola karnego: defensywa rywala zostawia sporo miejsca przed szesnastką (dopuszcza {float(r_opp.get('Outside_Box_Shots_Against_Mean', 0)):.1f} strzałów z dystansu).")
+
+        # 9. Skuteczność bramkarza rywala
+        if float(r_opp.get("Keeper_Saves_Mean", 0)) <= team_stats["Keeper_Saves_Mean"].quantile(0.30):
+            plan.append(f"Często zmuszać bramkarza rywala do interwencji: notuje poniżej {float(r_opp.get('Keeper_Saves_Mean', 0)):.1f} obrony na mecz.")
+
+        return plan
+
+    plan_a = build_dynamic_gameplan(team_a, team_b, row_a, row_b)
+    plan_b = build_dynamic_gameplan(team_b, team_a, row_b, row_a)
+
     st.markdown("---")
     st.markdown(
-        f"#####  Keys to Victory (AI Game Plan Briefing)"
-        if selected_lang == "EN"
-        else f"#####  3 Klucze do Zwycięstwa (Odprawa Trenerska AI)"
+        f"#####  Kluczowe Wytyczne i Punkty Zapalne ({team_a}: {len(plan_a)} | {team_b}: {len(plan_b)})"
+        if selected_lang == "PL"
+        else f"#####  Match Directives & Critical Flashpoints ({team_a}: {len(plan_a)} | {team_b}: {len(plan_b)})"
     )
 
     col_plan_a, col_plan_b = st.columns(2)
 
     with col_plan_a:
-        st.markdown(f"**Plan meczowy dla: {team_a}**")
-        for i, k in enumerate(keys_team_a[:3], 1):
-            st.info(f"**{i}.** {k}")
+        st.markdown(f"**Wytyczne dla: {team_a}**")
+        for i, directive in enumerate(plan_a, 1):
+            st.info(f"**{i}.** {directive}")
 
     with col_plan_b:
-        st.markdown(f"**Plan meczowy dla: {team_b}**")
-        for i, k in enumerate(keys_team_b[:3], 1):
-            st.warning(f"**{i}.** {k}")        
-
+        st.markdown(f"**Wytyczne dla: {team_b}**")
+        for i, directive in enumerate(plan_b, 1):
+            st.warning(f"**{i}.** {directive}")
 
 # =========================================================================
 # TAB 6: PRACOWNIA ZALEŻNOŚCI (PL / EN)
