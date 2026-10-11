@@ -3632,13 +3632,14 @@ with tab_h2h:
 
     # =========================================================
     # =========================================================
+    # =========================================================
     # MODUŁ: MATRYCA PRZEWAG (ATAK VS OBRONA) & DYNAMICZNE KLUCZE
     # =========================================================
     st.markdown("---")
     st.subheader(
-        " Tactical Matchup Matrix & Pre-Match Game Plan"
+        "⚔️ Tactical Matchup Matrix & Pre-Match Game Plan"
         if selected_lang == "EN"
-        else " Matryca Zderzenia Formacji & Wytyczne Taktyczne AI"
+        else "⚔️ Matryca Zderzenia Formacji & Wytyczne Taktyczne AI"
     )
     st.caption(
         "Dynamic pre-match directives generated based on statistical mismatches between both teams."
@@ -3646,41 +3647,6 @@ with tab_h2h:
         else "Dynamiczne wytyczne przedmeczowe generowane automatycznie na podstawie wykrytych dysproporcji i słabości rywala."
     )
 
-    # 1. Obliczenia krzyżowe (Atak A vs Obrona B oraz Atak B vs Obrona A)
-    clash_dimensions = [
-        ("Atak Pozycyjny (Open Play)", "Open Play Threat", "xG_OP_na_mecz", "xGA_OP_na_mecz"),
-        ("Stałe Fragmenty Gry (SFG)", "Set Piece Threat", "xG_SP_na_mecz", "xGA_SP_na_mecz"),
-        ("Inwazja w Szesnastkę", "Box Penetration", "Strzaly_z_pola_karnego", "Box_Shots_Against_Mean"),
-        ("Kontrola i Terytorium", "Territorial Grip", "Passes_Opp_Half_Mean", "Passes_Opp_Half_Against_Mean"),
-    ]
-
-    matchup_rows = []
-    for name_pl, name_en, att_col, def_col in clash_dimensions:
-        dim_name = name_en if selected_lang == "EN" else name_pl
-        val_att_a = float(row_a.get(att_col, 0.0))
-        val_def_b = float(row_b.get(def_col, 0.0))
-        val_att_b = float(row_b.get(att_col, 0.0))
-        val_def_a = float(row_a.get(def_col, 0.0))
-        
-        std_att = team_stats[att_col].std() if team_stats[att_col].std() > 0 else 1.0
-        mismatch_a = (val_att_a - team_stats[att_col].mean()) / std_att + (val_def_b - team_stats[def_col].mean()) / std_att
-        mismatch_b = (val_att_b - team_stats[att_col].mean()) / std_att + (val_def_a - team_stats[def_col].mean()) / std_att
-
-        matchup_rows.append({
-            "dimension": dim_name,
-            "att_a": val_att_a,
-            "def_b": val_def_b,
-            "edge_a": mismatch_a,
-            "att_b": val_att_b,
-            "def_a": val_def_a,
-            "edge_b": mismatch_b,
-        })
-
-    # Renderowanie kart zderzeń formacji
-    col_clash_1, col_clash_2 = st.columns(2)
-
-
-    # 1. Rozszerzona pula 8 wymiarów zderzenia formacji
     clash_dimensions = [
         (
             "Atak Pozycyjny (Open Play)", "Open Play Threat", 
@@ -3730,14 +3696,13 @@ with tab_h2h:
     for name_pl, name_en, att_col, def_col, desc in clash_dimensions:
         dim_name = name_en if selected_lang == "EN" else name_pl
         
-        # --- Zderzenie A (Atak A vs Obrona B) ---
+        # Starcie A (Atak A vs Obrona B)
         val_att_a = float(row_a.get(att_col, 0.0))
         val_def_b = float(row_b.get(def_col, 0.0))
         mean_att = float(team_stats[att_col].mean()) if att_col in team_stats else 1.0
         mean_def = float(team_stats[def_col].mean()) if def_col in team_stats else 1.0
         std_att = float(team_stats[att_col].std()) if (att_col in team_stats and team_stats[att_col].std() > 0) else 1.0
         
-        # Z-Score delta: atak ponad ligę + obrona rywala poniżej ligi (dopuszcza więcej = słabsza obrona)
         score_a = ((val_att_a - mean_att) / std_att) + ((val_def_b - mean_def) / std_att)
         power_pct_a = int(np.clip(50 + (score_a * 22), 5, 95))
 
@@ -3746,7 +3711,7 @@ with tab_h2h:
             "score": score_a, "power_pct": power_pct_a
         })
 
-        # --- Zderzenie B (Atak B vs Obrona A) ---
+        # Starcie B (Atak B vs Obrona A)
         val_att_b = float(row_b.get(att_col, 0.0))
         val_def_a = float(row_a.get(def_col, 0.0))
         score_b = ((val_att_b - mean_att) / std_att) + ((val_def_a - mean_def) / std_att)
@@ -3774,34 +3739,31 @@ with tab_h2h:
             badge_color = "#94A3B8"
             bar_color = "#38BDF8"
 
-        html_card = f"""
-        <div style="background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span style="font-weight: 700; color: #FFFFFF; font-size: 13.5px;">{m['name']}</span>
-                <span style="background-color: {badge_bg}; color: {badge_color}; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px;">{badge_text}</span>
-            </div>
-            <div style="font-size: 11px; color: #8B949E; margin-bottom: 8px;">{m['desc']}</div>
-            
-            <!-- Wizualny wskaźnik szali przewagi -->
-            <div style="background-color: #21262D; border-radius: 4px; height: 6px; width: 100%; overflow: hidden; margin-bottom: 8px;">
-                <div style="background-color: {bar_color}; height: 100%; width: {m['power_pct']}%; transition: width 0.3s ease;"></div>
-            </div>
-            
-            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #CBD5E1;">
-                <span>Atak ({team_att}): <b style="color: #FFFFFF;">{m['att']:.2f}</b></span>
-                <span>Obrona ({team_def}): <b style="color: #FFFFFF;">{m['def']:.2f}</b></span>
-            </div>
-        </div>
-        """
+        html_card = (
+            f'<div style="background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px;">'
+            f'<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">'
+            f'<span style="font-weight: 700; color: #FFFFFF; font-size: 13.5px;">{m["name"]}</span>'
+            f'<span style="background-color: {badge_bg}; color: {badge_color}; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px;">{badge_text}</span>'
+            f'</div>'
+            f'<div style="font-size: 11px; color: #8B949E; margin-bottom: 8px;">{m["desc"]}</div>'
+            f'<div style="background-color: #21262D; border-radius: 4px; height: 6px; width: 100%; overflow: hidden; margin-bottom: 8px;">'
+            f'<div style="background-color: {bar_color}; height: 100%; width: {m["power_pct"]}%;"></div>'
+            f'</div>'
+            f'<div style="display: flex; justify-content: space-between; font-size: 12px; color: #CBD5E1;">'
+            f'<span>Atak ({team_att}): <b style="color: #FFFFFF;">{m["att"]:.2f}</b></span>'
+            f'<span>Obrona ({team_def}): <b style="color: #FFFFFF;">{m["def"]:.2f}</b></span>'
+            f'</div>'
+            f'</div>'
+        )
         st.markdown(html_card, unsafe_allow_html=True)
 
     col_clash_1, col_clash_2 = st.columns(2)
 
     with col_clash_1:
         st.markdown(
-            f"""<div style="background-color: #161B22; border-left: 4px solid #38BDF8; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
-                <span style="font-weight: 800; color: #38BDF8; font-size: 15px;">🔵 Atak {team_a} ➔ Obrona {team_b}</span>
-            </div>""",
+            f'<div style="background-color: #161B22; border-left: 4px solid #38BDF8; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">'
+            f'<span style="font-weight: 800; color: #38BDF8; font-size: 15px;">🔵 Atak {team_a} ➔ Obrona {team_b}</span>'
+            f'</div>',
             unsafe_allow_html=True
         )
         for row in matchup_rows_a:
@@ -3809,9 +3771,9 @@ with tab_h2h:
 
     with col_clash_2:
         st.markdown(
-            f"""<div style="background-color: #161B22; border-left: 4px solid #F59E0B; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
-                <span style="font-weight: 800; color: #F59E0B; font-size: 15px;">🟠 Atak {team_b} ➔ Obrona {team_a}</span>
-            </div>""",
+            f'<div style="background-color: #161B22; border-left: 4px solid #F59E0B; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">'
+            f'<span style="font-weight: 800; color: #F59E0B; font-size: 15px;">🟠 Atak {team_b} ➔ Obrona {team_a}</span>'
+            f'</div>',
             unsafe_allow_html=True
         )
         for row in matchup_rows_b:
