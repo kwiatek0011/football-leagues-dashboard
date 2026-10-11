@@ -3628,7 +3628,159 @@ with tab_h2h:
         )
     )
 
-    st.plotly_chart(fig_radar, use_container_width=True)        
+    st.plotly_chart(fig_radar, use_container_width=True)
+
+    # =========================================================
+    # MODUŁ: MATRYCA PRZEWAG (ATAK VS OBRONA) & 3 KLUCZE DO ZWYCIĘSTWA
+    # =========================================================
+    st.markdown("---")
+    st.subheader(
+        " Tactical Matchup Matrix & Pre-Match Game Plan"
+        if selected_lang == "EN"
+        else " Matryca Zderzenia Formacji & 3 Klucze do Zwycięstwa"
+    )
+    st.caption(
+        "Cross-analysis of Team A offense vs Team B defense (and vice versa) with algorithmic coaching directives."
+        if selected_lang == "EN"
+        else "Krzyżowe zestawienie ataku z obroną rywala oraz algorytmiczne wytyczne taktyczne dla obu sztabów szkoleniowych."
+    )
+
+    # 1. Obliczenia krzyżowe (Atak A vs Obrona B oraz Atak B vs Obrona A)
+    # Metryki: (Nazwa PL, Nazwa EN, Kolumna Ataku, Kolumna Obrony, Mnożnik/Typ)
+    clash_dimensions = [
+        ("Atak Pozycyjny (Open Play)", "Open Play Threat", "xG_OP_na_mecz", "xGA_OP_na_mecz"),
+        ("Stałe Fragmenty Gry (SFG)", "Set Piece Threat", "xG_SP_na_mecz", "xGA_SP_na_mecz"),
+        ("Inwazja w Szesnastkę", "Box Penetration", "Strzaly_z_pola_karnego", "Box_Shots_Against_Mean"),
+        ("Kontrola i Terytorium", "Territorial Grip", "Passes_Opp_Half_Mean", "Passes_Opp_Half_Against_Mean"),
+    ]
+
+    # Zderzenie 1: Atak Team A vs Obrona Team B
+    # Zderzenie 2: Atak Team B vs Obrona Team A
+    matchup_rows = []
+    keys_team_a = []
+    keys_team_b = []
+
+    for name_pl, name_en, att_col, def_col in clash_dimensions:
+        dim_name = name_en if selected_lang == "EN" else name_pl
+        
+        # Starcie 1: A atakuje, B broni
+        val_att_a = float(row_a[att_col])
+        val_def_b = float(row_b[def_col])
+        std_att = team_stats[att_col].std() if team_stats[att_col].std() > 0 else 1.0
+        # Wskaźnik przewagi (im wyższy atak A i gorsza obrona B, tym większa luka)
+        mismatch_a = (val_att_a - team_stats[att_col].mean()) / std_att + (val_def_b - team_stats[def_col].mean()) / std_att
+
+        # Starcie 2: B atakuje, A broni
+        val_att_b = float(row_b[att_col])
+        val_def_a = float(row_a[def_col])
+        mismatch_b = (val_att_b - team_stats[att_col].mean()) / std_att + (val_def_a - team_stats[def_col].mean()) / std_att
+
+        matchup_rows.append({
+            "dimension": dim_name,
+            "att_a": val_att_a,
+            "def_b": val_def_b,
+            "edge_a": mismatch_a,
+            "att_b": val_att_b,
+            "def_a": val_def_a,
+            "edge_b": mismatch_b,
+        })
+
+        # Generowanie reguł dla Kluczy do Zwycięstwa
+        if "Open Play" in dim_name or "Pozycyjny" in dim_name:
+            if mismatch_a > 0.6:
+                keys_team_a.append(f"Wykorzystać słabość rywala w obronie pozycyjnej (dopuszcza aż {val_def_b:.2f} xGA OP). Rozciągać grę w ataku.")
+            else:
+                keys_team_b.append(f"Zagęścić środek pola: {team_a} generuje w grze otwartej {val_att_a:.2f} xG na mecz.")
+
+        if "Set Piece" in dim_name or "Stałe" in dim_name:
+            if mismatch_a > 0.5:
+                keys_team_a.append(f"Polować na stałe fragmenty gry: {team_b} dopuszcza po SFG wysokie {val_def_b:.2f} xGA.")
+            if mismatch_b > 0.5:
+                keys_team_b.append(f"Szukać rzutów rożnych i wolnych: defensywa {team_a} traci z SFG średnio {val_def_a:.2f} xGA.")
+
+        if "Box" in dim_name or "Szesnastk" in dim_name:
+            if val_att_a > val_def_b:
+                keys_team_a.append(f"Dostarczać piłki w pole karne: średnia {val_att_a:.1f} strzałów z pola przewyższa opór rywala ({val_def_b:.1f}).")
+            if val_att_b > val_def_a:
+                keys_team_b.append(f"Szybko finalizować w szesnastce: {team_a} dopuszcza z pola karnego {val_def_a:.1f} uderzeń.")
+
+    # Uzupełnienie kluczy jeśli jest ich za mało
+    if len(keys_team_a) < 3:
+        keys_team_a.append(f"Presować niskie rozegranie: rywal wykonuje {float(row_b.get('Passes_Own_Half_Mean', 0)):.0f} podań na własnej połowie.")
+    if len(keys_team_b) < 3:
+        keys_team_b.append(f"Wytrzymać fizycznie w starciach 1 na 1 (rywal notuje {float(row_a.get('Pojedynki_Wygrane', 0)):.0f} wygranych pojedynków).")
+
+    # Renderowanie 2 kolumn: Karty zderzeń formacji
+    col_clash_1, col_clash_2 = st.columns(2)
+
+    with col_clash_1:
+        st.markdown(
+            f"""<div style="background-color: #161B22; border-left: 4px solid #38BDF8; border-radius: 6px; padding: 12px 16px; margin-bottom: 12px;">
+                <span style="font-weight: 700; color: #38BDF8; font-size: 15px;">🔵 Atak {team_a} ➔ Obrona {team_b}</span>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        for m in matchup_rows:
+            delta = m["att_a"] - m["def_b"]
+            kolor_paska = "#10B981" if m["edge_a"] > 0.4 else ("#EF4444" if m["edge_a"] < -0.4 else "#38BDF8")
+            status_txt = "Zdecydowana przewaga ataku" if m["edge_a"] > 0.4 else ("Szczelny mur obrony" if m["edge_a"] < -0.4 else "Wyrównany bój")
+            st.markdown(
+                f"""<div style="background-color: #0E1117; border: 1px solid #30363D; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #E2E8F0;">
+                        <span>{m['dimension']}</span>
+                        <span style="color: {kolor_paska};">{status_txt}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94A3B8; margin-top: 4px;">
+                        <span>Kreacja ({team_a}): <b>{m['att_a']:.2f}</b></span>
+                        <span>Dopuszczane ({team_b}): <b>{m['def_b']:.2f}</b></span>
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+
+    with col_clash_2:
+        st.markdown(
+            f"""<div style="background-color: #161B22; border-left: 4px solid #F59E0B; border-radius: 6px; padding: 12px 16px; margin-bottom: 12px;">
+                <span style="font-weight: 700; color: #F59E0B; font-size: 15px;">🟠 Atak {team_b} ➔ Obrona {team_a}</span>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        for m in matchup_rows:
+            kolor_paska = "#10B981" if m["edge_b"] > 0.4 else ("#EF4444" if m["edge_b"] < -0.4 else "#F59E0B")
+            status_txt = "Zdecydowana przewaga ataku" if m["edge_b"] > 0.4 else ("Szczelny mur obrony" if m["edge_b"] < -0.4 else "Wyrównany bój")
+            st.markdown(
+                f"""<div style="background-color: #0E1117; border: 1px solid #30363D; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #E2E8F0;">
+                        <span>{m['dimension']}</span>
+                        <span style="color: {kolor_paska};">{status_txt}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94A3B8; margin-top: 4px;">
+                        <span>Kreacja ({team_b}): <b>{m['att_b']:.2f}</b></span>
+                        <span>Dopuszczane ({team_a}): <b>{m['def_a']:.2f}</b></span>
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+
+    # 2. Blok: 3 Klucze do Zwycięstwa (Odprawa Trenerska)
+    st.markdown("---")
+    st.markdown(
+        f"#####  Keys to Victory (AI Game Plan Briefing)"
+        if selected_lang == "EN"
+        else f"#####  3 Klucze do Zwycięstwa (Odprawa Trenerska AI)"
+    )
+
+    col_plan_a, col_plan_b = st.columns(2)
+
+    with col_plan_a:
+        st.markdown(f"**Plan meczowy dla: {team_a}**")
+        for i, k in enumerate(keys_team_a[:3], 1):
+            st.info(f"**{i}.** {k}")
+
+    with col_plan_b:
+        st.markdown(f"**Plan meczowy dla: {team_b}**")
+        for i, k in enumerate(keys_team_b[:3], 1):
+            st.warning(f"**{i}.** {k}")        
 
 
 # =========================================================================
