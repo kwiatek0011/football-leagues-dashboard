@@ -3637,9 +3637,9 @@ with tab_h2h:
     # =========================================================
     st.markdown("---")
     st.subheader(
-        "⚔️ Tactical Matchup Matrix & Pre-Match Game Plan"
+        " Tactical Matchup Matrix & Pre-Match Game Plan"
         if selected_lang == "EN"
-        else "⚔️ Matryca Zderzenia Formacji & Wytyczne Taktyczne AI"
+        else " Matryca Zderzenia Formacji & Wytyczne Taktyczne AI"
     )
     st.caption(
         "Dynamic pre-match directives generated based on statistical mismatches between both teams."
@@ -3724,17 +3724,17 @@ with tab_h2h:
 
     def render_clash_card(m, team_att, team_def):
         if m["score"] >= 0.5:
-            badge_text = "🔥 Wyraźna Przewaga Ataku" if selected_lang == "PL" else "🔥 Major Offensive Edge"
+            badge_text = " Wyraźna Przewaga Ataku" if selected_lang == "PL" else " Major Offensive Edge"
             badge_bg = "#064E3B"
             badge_color = "#34D399"
             bar_color = "#10B981"
         elif m["score"] <= -0.5:
-            badge_text = "🛡️ Szczelny Mur Obrony" if selected_lang == "PL" else "🛡️ Defensive Wall"
+            badge_text = " Szczelny Mur Obrony" if selected_lang == "PL" else " Defensive Wall"
             badge_bg = "#7F1D1D"
             badge_color = "#F87171"
             bar_color = "#EF4444"
         else:
-            badge_text = "⚖️ Wyrównana Walka" if selected_lang == "PL" else "⚖️ Even Matchup"
+            badge_text = " Wyrównana Walka" if selected_lang == "PL" else " Even Matchup"
             badge_bg = "#1E293B"
             badge_color = "#94A3B8"
             bar_color = "#38BDF8"
