@@ -3679,54 +3679,145 @@ with tab_h2h:
     # Renderowanie kart zderzeń formacji
     col_clash_1, col_clash_2 = st.columns(2)
 
+
+    # 1. Rozszerzona pula 8 wymiarów zderzenia formacji
+    clash_dimensions = [
+        (
+            "Atak Pozycyjny (Open Play)", "Open Play Threat", 
+            "xG_OP_na_mecz", "xGA_OP_na_mecz",
+            "Gra kombinacyjna i sforsowanie niskiego bloku"
+        ),
+        (
+            "Stałe Fragmenty Gry (SFG)", "Set Piece Threat", 
+            "xG_SP_na_mecz", "xGA_SP_na_mecz",
+            "Rzuty rożne, wolne i walka o drugą piłkę"
+        ),
+        (
+            "Obecność w Szesnastce", "Box Penetration", 
+            "Strzaly_z_pola_karnego", "Box_Shots_Against_Mean",
+            "Wchodzenie w pole karne i wykończenie z bliska"
+        ),
+        (
+            "Kontrola Terytorialna", "Territorial Grip", 
+            "Passes_Opp_Half_Mean", "Passes_Opp_Half_Against_Mean",
+            "Utrzymanie piłki na połowie rywala i spychaniе do obrony"
+        ),
+        (
+            "Gra Skrzydłami i Dośrodkowania", "Flank & Cross Threat", 
+            "Accurate_Crosses_Mean", "Aerial_Duels_Won_Mean",
+            "Centry w pole karne vs dominacja stoperów w powietrzu"
+        ),
+        (
+            "Pressing i Odbiór w Fazie Przejścia", "High Press & Disruption", 
+            "Tackles", "Passes_Own_Half_Mean",
+            "Agresywny doskok vs płynność wyjścia spod pressingu"
+        ),
+        (
+            "Strzały z Dystansu (Druga Linia)", "Outside Box Threat", 
+            "Strzaly_zza_pola_karnego", "Outside_Box_Shots_Against_Mean",
+            "Uderzenia zza pola karnego vs blokowanie przedpola"
+        ),
+        (
+            "Jakość Wykończenia vs Bramkarz", "Finishing vs GK Wall", 
+            "xGOT_na_mecz", "Goals_Prevented_Mecz",
+            "Jakość strzałów w światło bramki vs refleks golkipera"
+        ),
+    ]
+
+    matchup_rows_a = []
+    matchup_rows_b = []
+
+    for name_pl, name_en, att_col, def_col, desc in clash_dimensions:
+        dim_name = name_en if selected_lang == "EN" else name_pl
+        
+        # --- Zderzenie A (Atak A vs Obrona B) ---
+        val_att_a = float(row_a.get(att_col, 0.0))
+        val_def_b = float(row_b.get(def_col, 0.0))
+        mean_att = float(team_stats[att_col].mean()) if att_col in team_stats else 1.0
+        mean_def = float(team_stats[def_col].mean()) if def_col in team_stats else 1.0
+        std_att = float(team_stats[att_col].std()) if (att_col in team_stats and team_stats[att_col].std() > 0) else 1.0
+        
+        # Z-Score delta: atak ponad ligę + obrona rywala poniżej ligi (dopuszcza więcej = słabsza obrona)
+        score_a = ((val_att_a - mean_att) / std_att) + ((val_def_b - mean_def) / std_att)
+        power_pct_a = int(np.clip(50 + (score_a * 22), 5, 95))
+
+        matchup_rows_a.append({
+            "name": dim_name, "desc": desc, "att": val_att_a, "def": val_def_b,
+            "score": score_a, "power_pct": power_pct_a
+        })
+
+        # --- Zderzenie B (Atak B vs Obrona A) ---
+        val_att_b = float(row_b.get(att_col, 0.0))
+        val_def_a = float(row_a.get(def_col, 0.0))
+        score_b = ((val_att_b - mean_att) / std_att) + ((val_def_a - mean_def) / std_att)
+        power_pct_b = int(np.clip(50 + (score_b * 22), 5, 95))
+
+        matchup_rows_b.append({
+            "name": dim_name, "desc": desc, "att": val_att_b, "def": val_def_a,
+            "score": score_b, "power_pct": power_pct_b
+        })
+
+    def render_clash_card(m, team_att, team_def):
+        if m["score"] >= 0.5:
+            badge_text = "🔥 Wyraźna Przewaga Ataku" if selected_lang == "PL" else "🔥 Major Offensive Edge"
+            badge_bg = "#064E3B"
+            badge_color = "#34D399"
+            bar_color = "#10B981"
+        elif m["score"] <= -0.5:
+            badge_text = "🛡️ Szczelny Mur Obrony" if selected_lang == "PL" else "🛡️ Defensive Wall"
+            badge_bg = "#7F1D1D"
+            badge_color = "#F87171"
+            bar_color = "#EF4444"
+        else:
+            badge_text = "⚖️ Wyrównana Walka" if selected_lang == "PL" else "⚖️ Even Matchup"
+            badge_bg = "#1E293B"
+            badge_color = "#94A3B8"
+            bar_color = "#38BDF8"
+
+        html_card = f"""
+        <div style="background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; padding: 12px 16px; margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 700; color: #FFFFFF; font-size: 13.5px;">{m['name']}</span>
+                <span style="background-color: {badge_bg}; color: {badge_color}; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px;">{badge_text}</span>
+            </div>
+            <div style="font-size: 11px; color: #8B949E; margin-bottom: 8px;">{m['desc']}</div>
+            
+            <!-- Wizualny wskaźnik szali przewagi -->
+            <div style="background-color: #21262D; border-radius: 4px; height: 6px; width: 100%; overflow: hidden; margin-bottom: 8px;">
+                <div style="background-color: {bar_color}; height: 100%; width: {m['power_pct']}%; transition: width 0.3s ease;"></div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: #CBD5E1;">
+                <span>Atak ({team_att}): <b style="color: #FFFFFF;">{m['att']:.2f}</b></span>
+                <span>Obrona ({team_def}): <b style="color: #FFFFFF;">{m['def']:.2f}</b></span>
+            </div>
+        </div>
+        """
+        st.markdown(html_card, unsafe_allow_html=True)
+
+    col_clash_1, col_clash_2 = st.columns(2)
+
     with col_clash_1:
         st.markdown(
-            f"""<div style="background-color: #161B22; border-left: 4px solid #38BDF8; border-radius: 6px; padding: 12px 16px; margin-bottom: 12px;">
-                <span style="font-weight: 700; color: #38BDF8; font-size: 15px;">🔵 Atak {team_a} ➔ Obrona {team_b}</span>
+            f"""<div style="background-color: #161B22; border-left: 4px solid #38BDF8; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
+                <span style="font-weight: 800; color: #38BDF8; font-size: 15px;">🔵 Atak {team_a} ➔ Obrona {team_b}</span>
             </div>""",
             unsafe_allow_html=True
         )
-        for m in matchup_rows:
-            kolor_paska = "#10B981" if m["edge_a"] > 0.4 else ("#EF4444" if m["edge_a"] < -0.4 else "#38BDF8")
-            status_txt = "Zdecydowana przewaga ataku" if m["edge_a"] > 0.4 else ("Szczelny mur obrony" if m["edge_a"] < -0.4 else "Wyrównany bój")
-            st.markdown(
-                f"""<div style="background-color: #0E1117; border: 1px solid #30363D; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
-                    <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #E2E8F0;">
-                        <span>{m['dimension']}</span>
-                        <span style="color: {kolor_paska};">{status_txt}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94A3B8; margin-top: 4px;">
-                        <span>Kreacja ({team_a}): <b>{m['att_a']:.2f}</b></span>
-                        <span>Dopuszczane ({team_b}): <b>{m['def_b']:.2f}</b></span>
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
+        for row in matchup_rows_a:
+            render_clash_card(row, team_a, team_b)
 
     with col_clash_2:
         st.markdown(
-            f"""<div style="background-color: #161B22; border-left: 4px solid #F59E0B; border-radius: 6px; padding: 12px 16px; margin-bottom: 12px;">
-                <span style="font-weight: 700; color: #F59E0B; font-size: 15px;">🟠 Atak {team_b} ➔ Obrona {team_a}</span>
+            f"""<div style="background-color: #161B22; border-left: 4px solid #F59E0B; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
+                <span style="font-weight: 800; color: #F59E0B; font-size: 15px;">🟠 Atak {team_b} ➔ Obrona {team_a}</span>
             </div>""",
             unsafe_allow_html=True
         )
-        for m in matchup_rows:
-            kolor_paska = "#10B981" if m["edge_b"] > 0.4 else ("#EF4444" if m["edge_b"] < -0.4 else "#F59E0B")
-            status_txt = "Zdecydowana przewaga ataku" if m["edge_b"] > 0.4 else ("Szczelny mur obrony" if m["edge_b"] < -0.4 else "Wyrównany bój")
-            st.markdown(
-                f"""<div style="background-color: #0E1117; border: 1px solid #30363D; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
-                    <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #E2E8F0;">
-                        <span>{m['dimension']}</span>
-                        <span style="color: {kolor_paska};">{status_txt}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #94A3B8; margin-top: 4px;">
-                        <span>Kreacja ({team_b}): <b>{m['att_b']:.2f}</b></span>
-                        <span>Dopuszczane ({team_a}): <b>{m['def_a']:.2f}</b></span>
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
+        for row in matchup_rows_b:
+            render_clash_card(row, team_b, team_a)
 
+    
     # =========================================================
     # SILNIK DYNAMICZNYCH WYTYCZNYCH TAKTYCZNYCH (BRAK SZTYWNYCH LIMITÓW)
     # =========================================================
