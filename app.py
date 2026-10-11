@@ -1013,21 +1013,41 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
 
 
 def render_metric_trend_chart(matches_df, team_stats, match_col, avg_col, metric_label, yaxis_title="Wartość"):
-    """Uniwersalny wykres trendu kolejka po kolejce dla wybranej drużyny na tle średniej ligowej."""
+    """Uniwersalny wykres trendu kolejka po kolejce z pełną informacją o meczu po najechaniu."""
     lang = st.session_state.get("selected_lang", "PL")
     st.markdown("---")
     
     team_list = sorted(team_stats["Team"].unique().tolist())
     sel_label = "Select team for trend analysis:" if lang == "EN" else "Wybierz drużynę do analizy serii mecz po meczu:"
     
-    # Unikalny klucz dla selectboxa oparty o nazwę kolumny
-    selected_trend_team = st.selectbox(sel_label, team_list, index=0, key=f"sb_trend_{match_col}")
+    selected_trend_team = st.selectbox(sel_label, team_list, index=0, key=f"sb_trend_{match_col}_{avg_col}")
     
     team_matches = matches_df[matches_df["Team"] == selected_trend_team].copy().reset_index(drop=True)
     team_matches["Kolejka"] = team_matches.index + 1
     
     league_avg = team_stats[avg_col].mean()
     
+    # Tworzymy czytelny tekst dymka dla każdego meczu
+    hover_texts = []
+    for _, r in team_matches.iterrows():
+        res = f"{int(r['Goals_For'])}:{int(r['Goals_Against'])}"
+        venue_str = "Dom" if r["Venue"] == "Home" else "Wyjazd"
+        if lang == "EN":
+            venue_str = r["Venue"]
+            hover_texts.append(
+                f"<b>Matchweek {r['Kolejka']}</b><br>"
+                f"Opponent: <b>{r['Opponent']}</b> ({venue_str})<br>"
+                f"Result: <b>{res}</b><br>"
+                f"{metric_label}: <b>{r[match_col]:.2f}</b>"
+            )
+        else:
+            hover_texts.append(
+                f"<b>Kolejka {r['Kolejka']}</b><br>"
+                f"Rywal: <b>{r['Opponent']}</b> ({venue_str})<br>"
+                f"Wynik: <b>{res}</b><br>"
+                f"{metric_label}: <b>{r[match_col]:.2f}</b>"
+            )
+
     fig_tr = go.Figure()
     fig_tr.add_trace(go.Scatter(
         x=team_matches["Kolejka"],
@@ -1036,13 +1056,8 @@ def render_metric_trend_chart(matches_df, team_stats, match_col, avg_col, metric
         name=selected_trend_team,
         line=dict(color="#38BDF8", width=3),
         marker=dict(size=10, color="#38BDF8", line=dict(width=1.5, color="#FFFFFF")),
-        hovertemplate=(
-            "<b>Matchweek %{x}</b><br>vs " + team_matches["Opponent"] + " (" + team_matches["Venue"] + ")<br>" +
-            f"{metric_label}: <b>%{{y:.2f}}</b><extra></extra>"
-        ) if lang == "EN" else (
-            "<b>Kolejka %{x}</b><br>vs " + team_matches["Opponent"] + " (" + team_matches["Venue"] + ")<br>" +
-            f"{metric_label}: <b>%{{y:.2f}}</b><extra></extra>"
-        )
+        hovertext=hover_texts,
+        hoverinfo="text"
     ))
     
     fig_tr.add_hline(
@@ -1078,7 +1093,7 @@ def render_metric_trend_chart(matches_df, team_stats, match_col, avg_col, metric
         margin=dict(l=60, r=40, t=50, b=40)
     )
     
-    st.plotly_chart(fig_tr, use_container_width=True)        
+    st.plotly_chart(fig_tr, use_container_width=True)
 
 # =========================================================================
 # WYBÓR LIGI I DYNAMICZNE WCZYTANIE DANYCH
