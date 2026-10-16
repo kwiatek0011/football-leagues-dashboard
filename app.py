@@ -4015,7 +4015,7 @@ with tab_analiza_ligowa:
     with col_sel_trend_scope:
         trend_window = st.slider(
             "Zakres ostatnich meczów do badania pędu (momentum):" if selected_lang == "PL" else "Recent matches window for momentum:",
-            min_value=3, max_value=8, value=5, step=1,
+            min_value=1, max_value=8, value=3, step=1,
             key="slider_trend_window"
         )
 
@@ -4023,107 +4023,210 @@ with tab_analiza_ligowa:
     sel_idx_metric = metric_names.index(selected_league_metric_name)
     m_pl, m_en, m_match_col, m_stat_col, lower_is_better = LEAGUE_METRICS_REGISTRY[sel_idx_metric]
 
-    # 2. Obliczenia pędu (Momentum & Trend Slopes) dla każdego klubu w lidze
+    # 2. Obliczenia pędu lub anomalii ostatniego meczu (Obsługa trend_window == 1)
     trend_results = []
     
     for team_name in team_stats["Team"].unique():
         t_sub = matches_df[matches_df["Team"] == team_name].copy().reset_index(drop=True)
-        if len(t_sub) >= 3 and m_match_col in t_sub.columns:
-            # Badamy ostatnie N meczów
+        if len(t_sub) >= 1 and m_match_col in t_sub.columns:
             recent_matches = t_sub.tail(trend_window).copy()
             y_vals = recent_matches[m_match_col].values
-            x_vals = np.arange(len(y_vals))
+            last_match = t_sub.iloc[-1]
+            last_opp_info = f"vs {last_match['Opponent']} ({int(last_match['Goals_For'])}:{int(last_match['Goals_Against'])})"
             
-            # Nachylenie linii trendu (współczynnik kierunkowy a: Y = aX + b)
-            if len(y_vals) > 1 and np.var(x_vals) > 0:
-                slope, _ = np.polyfit(x_vals, y_vals, 1)
+            # Gdy badamy 1 mecz: badamy czystą deltę z tego meczu względem sezonu
+            if trend_window == 1:
+                slope = round(float(y_vals[0] - t_sub[m_match_col].mean()), 2)
             else:
-                slope = 0.0
+                x_vals = np.arange(len(y_vals))
+                if len(y_vals) > 1 and np.var(x_vals) > 0:
+                    slope = round(float(np.polyfit(x_vals, y_vals, 1)[0]), 3)
+                else:
+                    slope = 0.0
                 
             curr_avg = y_vals.mean()
             season_avg = t_sub[m_match_col].mean()
             delta_recent = curr_avg - season_avg
+            pct_dev = ((delta_recent / season_avg) * 100) if season_avg > 0 else 0.0
             
             trend_results.append({
                 "Team": team_name,
-                "Slope": round(slope, 3),
+                "Slope": slope,
                 "Recent_Avg": round(curr_avg, 2),
                 "Season_Avg": round(season_avg, 2),
                 "Recent_Delta": round(delta_recent, 2),
-                "Recent_Values": y_vals.tolist()
+                "Pct_Dev": round(pct_dev, 1),
+                "Last_Opp": last_opp_info
             })
 
     df_trends = pd.DataFrame(trend_results)
 
-    # 3. Podział na kategorie trendu AI
-    # Jeśli mniej=lepiej (np. xGA), to ujemny slope jest sukcesem (obrona się poprawia)
+    # 3. Rozdzielenie na całą stawkę ligową (Progres vs Regres bez sztywnego limitu)
+    # 3. Podział na 3 stany: Progres, Stabilizacja (na 0), Regres
+    # 3. Podział na 3 stany i przygotowanie jednej tabeli ligowej
+    margin_neutral = 0.05
+
+    # 3. Podział na 3 stany i przygotowanie jednej tabeli ligowej (Wsparcie PL / EN)
+    margin_neutral = 0.05
+
+    def get_status_info(delta, lower_is_better, lang="PL"):
+        # Etykiety PL / EN
+        lbl_surge = " Progres" if lang == "PL" else "  Progress"
+        lbl_base = " Poziom Bazowy" if lang == "PL" else " Baseline"
+        lbl_slump = " Regres" if lang == "PL" else " Decline"
+
+        if lower_is_better:
+            if delta < -margin_neutral:
+                return lbl_surge, "#10B981", "#064E3B", 1
+            elif delta > margin_neutral:
+                return lbl_slump, "#EF4444", "#7F1D1D", 3
+            else:
+                return lbl_base, "#38BDF8", "#1E293B", 2
+        else:
+            if delta > margin_neutral:
+                return lbl_surge, "#10B981", "#064E3B", 1
+            elif delta < -margin_neutral:
+                return lbl_slump, "#EF4444", "#7F1D1D", 3
+            else:
+                return lbl_base, "#38BDF8", "#1E293B", 2
+
+    # Dodanie statusów do ramki danych z uwzględnieniem wybranego języka
+    statuses = [get_status_info(r["Recent_Delta"], lower_is_better, selected_lang) for _, r in df_trends.iterrows()]
+    df_trends["Status_Label"] = [s[0] for s in statuses]
+    df_trends["Status_Color"] = [s[1] for s in statuses]
+    df_trends["Status_Bg"] = [s[2] for s in statuses]
+    df_trends["Sort_Rank"] = [s[3] for s in statuses]
+
+    # Sortowanie: najpierw wystrzał formy (od największego plusa), potem neutralne, na końcu kryzys
     if lower_is_better:
-        rising_teams = df_trends.sort_values(by="Slope", ascending=True).head(3)  # spada xGA = poprawa
-        declining_teams = df_trends.sort_values(by="Slope", ascending=False).head(3) # rośnie xGA = kryzys
+        df_trends = df_trends.sort_values(by=["Sort_Rank", "Recent_Delta"], ascending=[True, True]).reset_index(drop=True)
     else:
-        rising_teams = df_trends.sort_values(by="Slope", ascending=False).head(3) # rośnie xG = poprawa
-        declining_teams = df_trends.sort_values(by="Slope", ascending=True).head(3) # spada xG = regres
+        df_trends = df_trends.sort_values(by=["Sort_Rank", "Recent_Delta"], ascending=[True, False]).reset_index(drop=True)
 
-    st.markdown("---")
-    st.markdown("### 📈 Raport Pędu Formy AI: Kto Notuje Progres, a Kto Zjazd?" if selected_lang == "PL" else "### 📈 AI Momentum Report: Surging vs Declining Teams")
+    is_single = (trend_window == 1)
     
-    col_surge, col_slump = st.columns(2)
+    # Dynamiczne nagłówki tabeli zależne od języka
+    if selected_lang == "EN":
+        col_scope_header = "Last Match" if is_single else f"Avg ({trend_window} MP)"
+        th_rank = "#"
+        th_team = "Team"
+        th_season = "Season Avg"
+        th_delta = "Delta (Dev %)"
+        th_trend = "Trend Rating"
+        table_title = " League-Wide Form & Momentum Overview"
+    else:
+        col_scope_header = "Ostatni Mecz" if is_single else f"Śr. ({trend_window} m.)"
+        th_rank = "#"
+        th_team = "Drużyna"
+        th_season = "Śr. Sezonowa"
+        th_delta = "Odchylenie (Delta)"
+        th_trend = "Ocena Trendu"
+        table_title = " Zbiorcza Tabela Formy & Dynamiki Ligi"
 
-    with col_surge:
-        st.markdown(
-            f"""<div style="background-color: #161B22; border-left: 4px solid #10B981; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
-                <span style="font-weight: 800; color: #10B981; font-size: 15px;">🚀 Największy Progres z Meczu na Mecz (Ostatnie {trend_window} gier)</span>
-            </div>""",
-            unsafe_allow_html=True
-        )
-        for _, r in rising_teams.iterrows():
-            arrow = "📈" if r["Slope"] > 0 else "📉"
-            sl_text = f"+{r['Slope']:.2f} / mecz" if r["Slope"] > 0 else f"{r['Slope']:.2f} / mecz"
-            st.markdown(
-                f"""<div style="background-color: #0E1117; border: 1px solid #30363D; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
-                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#FFFFFF;">
-                        <span>{r['Team']}</span>
-                        <span style="color:#10B981;">{arrow} Wzrost ({sl_text})</span>
-                    </div>
-                    <div style="font-size:12px; color:#94A3B8; margin-top:4px;">
-                        Średnia z {trend_window} m.: <b style="color:#FFFFFF;">{r['Recent_Avg']}</b> (w sezonie: {r['Season_Avg']} | delta: <b style="color:#10B981;">{r['Recent_Delta']:+.2f}</b>)
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-
-    with col_slump:
-        st.markdown(
-            f"""<div style="background-color: #161B22; border-left: 4px solid #EF4444; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
-                <span style="font-weight: 800; color: #EF4444; font-size: 15px;">⚠️ Największe Tąpnięcie / Regres Formy (Ostatnie {trend_window} gier)</span>
-            </div>""",
-            unsafe_allow_html=True
-        )
-        for _, r in declining_teams.iterrows():
-            arrow = "📉" if r["Slope"] < 0 else "📈"
-            sl_text = f"{r['Slope']:.2f} / mecz" if r["Slope"] < 0 else f"+{r['Slope']:.2f} / mecz"
-            st.markdown(
-                f"""<div style="background-color: #0E1117; border: 1px solid #30363D; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px;">
-                    <div style="display:flex; justify-content:space-between; font-weight:700; color:#FFFFFF;">
-                        <span>{r['Team']}</span>
-                        <span style="color:#EF4444;">{arrow} Regres ({sl_text})</span>
-                    </div>
-                    <div style="font-size:12px; color:#94A3B8; margin-top:4px;">
-                        Średnia z {trend_window} m.: <b style="color:#FFFFFF;">{r['Recent_Avg']}</b> (w sezonie: {r['Season_Avg']} | delta: <b style="color:#EF4444;">{r['Recent_Delta']:+.2f}</b>)
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-
-    # 4. Wykres Sparklines / Liniowy porównujący trendy w lidze
     st.markdown("---")
-    st.markdown(f"#####  Zestawienie Średniej Sezonowej ze Średnią Ostatnich {trend_window} Meczów")
+    st.markdown(f"### {table_title}")
+
+    # Generowanie wierszy tabeli HTML
+    rows_table_html = ""
+    for idx, r in df_trends.iterrows():
+        rank = idx + 1
+        team = r["Team"]
+        recent_val = f"{r['Recent_Avg']:.2f}"
+        season_val = f"{r['Season_Avg']:.2f}"
+        
+        # Formatowanie delty
+        if r["Recent_Delta"] > 0:
+            delta_str = f"+{r['Recent_Delta']:.2f} ({r['Pct_Dev']:+.0f}%)"
+        else:
+            delta_str = f"{r['Recent_Delta']:.2f} ({r['Pct_Dev']:+.0f}%)"
+
+        opp_info = f"<span style='color: #64748B; font-size: 11px;'>({r['Last_Opp']})</span>" if is_single else ""
+        badge_html = f"<span style='background: {r['Status_Bg']}; color: {r['Status_Color']}; padding: 3px 8px; border-radius: 10px; font-weight: 700; font-size: 11px;'>{r['Status_Label']}</span>"
+
+        rows_table_html += (
+            f'<tr style="height: 36px; border-bottom: 1px solid #21262D;">'
+            f'<td style="color: #94A3B8; font-weight: 700; text-align: left; width: 35px; padding: 4px 8px;">{rank}</td>'
+            f'<td style="color: #FFFFFF; font-weight: 600; text-align: left; padding: 4px 8px;">{team} {opp_info}</td>'
+            f'<td style="color: #FFFFFF; font-weight: 700; text-align: center; width: 110px; padding: 4px 8px;">{recent_val}</td>'
+            f'<td style="color: #94A3B8; text-align: center; width: 110px; padding: 4px 8px;">{season_val}</td>'
+            f'<td style="color: {r["Status_Color"]}; font-weight: 700; text-align: right; width: 140px; padding: 4px 8px;">{delta_str}</td>'
+            f'<td style="text-align: right; width: 170px; padding: 4px 8px;">{badge_html}</td>'
+            f'</tr>'
+        )
+
+    table_pixel_height = max(350, len(df_trends) * 38 + 75)
+
+    full_table_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <meta charset="utf-8">
+    <style>
+        body {{
+            margin: 0;
+            padding: 0;
+            background-color: transparent;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }}
+        .table-card {{
+            background-color: #161B22;
+            border: 1px solid #30363D;
+            border-radius: 8px;
+            padding: 14px 18px;
+            box-sizing: border-box;
+            width: 100%;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+            line-height: 1.4;
+        }}
+        th {{
+            border-bottom: 2px solid #30363D;
+            color: #8B949E;
+            font-size: 11px;
+            text-transform: uppercase;
+            padding: 6px 8px;
+        }}
+    </style>
+    </head>
+    <body>
+        <div class="table-card">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="text-align: left; width: 35px;">{th_rank}</th>
+                        <th style="text-align: left;">{th_team}</th>
+                        <th style="text-align: center; width: 110px;">{col_scope_header}</th>
+                        <th style="text-align: center; width: 110px;">{th_season}</th>
+                        <th style="text-align: right; width: 140px;">{th_delta}</th>
+                        <th style="text-align: right; width: 170px;">{th_trend}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_table_html}
+                </tbody>
+            </table>
+        </div>
+    </body>
+    </html>
+    """
+
+    components.html(full_table_html, height=table_pixel_height, scrolling=False)
+
+
+
+    # 4. Wykres słupkowy
+    st.markdown("---")
+    bar_title = "#####  Występ w Ostatniej Kolejce vs Średnia z Całego Sezonu" if is_single else f"#####  Zestawienie Średniej Sezonowej ze Średnią Ostatnich {trend_window} Meczów"
+    st.markdown(bar_title)
     
     df_plot_comp = df_trends.sort_values(by="Recent_Avg", ascending=False).reset_index(drop=True)
     
     fig_comp = go.Figure()
     fig_comp.add_trace(go.Bar(
-        name=f"Ostatnie {trend_window} meczów",
+        name="Ostatni mecz" if is_single else f"Ostatnie {trend_window} meczów",
         x=df_plot_comp["Team"],
         y=df_plot_comp["Recent_Avg"],
         marker_color="#38BDF8",
