@@ -4459,8 +4459,8 @@ with tab_asystent_ai:
 
         # TRYB B: FILTROWANIE MECZÓW (PARADOKSY, ANOMALIE, BRAMKI)
         else:
-            # Korekta typowych literówek w zapytaniu
-            q_norm = q_norm.replace("pomiimo", "pomimo").replace("set-play", "set play").replace("open-play", "open play")
+            # Standaryzacja myślników i odmian
+            q_norm = q_norm.replace("pomiimo", "pomimo").replace("set-play", "set play").replace("open-play", "open play").replace("xg-set play", "set play").replace("xg set-play", "set play")
 
             base_matches = matches_df.copy()
             if selected_team_filter:
@@ -4469,7 +4469,7 @@ with tab_asystent_ai:
                 base_matches = base_matches[base_matches["Venue"] == selected_venue_filter]
 
             # 1. Wynik (Wygrana / Remis / Porażka)
-            is_win = any(w in q_norm for w in ["wygran", "zwycies"]) or cr_result == "Tylko Wygrane (3 pkt)"
+            is_win = any(w in q_norm for w in ["wygran", "zwycies", "wygral"]) or cr_result == "Tylko Wygrane (3 pkt)"
             is_loss = any(w in q_norm for w in ["przegran", "poraz"]) or cr_result == "Tylko Porażki (0 pkt)"
             is_draw = any(w in q_norm for w in ["remis"]) or cr_result == "Tylko Remisy (1 pkt)"
 
@@ -4490,150 +4490,136 @@ with tab_asystent_ai:
             if "btts" in q_norm or "obie strzelily" in q_norm or cr_goals_cond == "Obie strzeliły (BTTS)":
                 base_matches = base_matches[(base_matches["Goals_For"] >= 1) & (base_matches["Goals_Against"] >= 1)]
 
-            # 3. Kierunek porównania: "wyższego / większego" (>) czy "niższego / mniejszego" (<)
-            is_higher = any(w in q_norm for w in ["wyzsz", "wieksz", "lepsz"])
-            is_lower = any(w in q_norm for w in ["nizsz", "mniejsz", "gorsz"])
+            # 3. Kierunek porównania: "wyższe / więcej" (>) czy "niższe / mniej" (<)
+            is_higher = any(w in q_norm for w in ["wyzsz", "wieksz", "wiecej", "lepsz"])
+            is_lower = any(w in q_norm for w in ["nizsz", "mniejsz", "mniej", "gorsz"])
 
-            # Domyślny kierunek: jeśli przegrana pomimo... to szukamy wyższego (>), jeśli wygrana pomimo... to niższego (<)
+            # Domyślna relacja przy słowie "pomimo"
             if not is_higher and not is_lower:
                 op_greater = True if is_loss else False
             else:
                 op_greater = is_higher
 
-            comp_word = "WYŻSZEGO" if op_greater else "NIŻSZEGO"
-            result_word = "Przegrane" if is_loss else ("Wygrane" if is_win else "Mecze")
-            paradox_desc = f"{result_word} pomimo {comp_word}"
-            extra_metric_col = None
-            extra_metric_title = None
+            comp_word = "WIĘCEJ / WYŻSZE" if op_greater else "MNIEJ / NIŻSZE"
 
-            # 4. Wykrywanie badanej metryki (kolejność ma znaczenie!)
-            # A. xGOT
-            if any(w in q_norm for w in ["xgot", "post-shot", "post shot", "on target"]) or cr_paradox == "Niższe xGOT niż rywal":
-                if op_greater:
-                    base_matches = base_matches[base_matches["xGOT_For"] > base_matches["xGOT_Against"]]
-                else:
-                    base_matches = base_matches[base_matches["xGOT_For"] < base_matches["xGOT_Against"]]
-                paradox_desc += " xGOT (Jakość strzałów celnych)"
+            # 4. Wykrywanie SZUKANEJ METRYKI (dynamiczne dopasowanie kolumn do pytania)
+            metric_label = "xG (Własne : Rywal)"
+            col_for = "xG_For"
+            col_opp = "xG_Against"
+            val_format = "float" # float / int / pct
 
-            # B. xG Set Play (stałe fragmenty: set play, sfg, rożne itp.)
+            # POJEDYNKI (Duels)
+            if any(w in q_norm for w in ["pojedyn", "starci", "duels"]):
+                metric_label = "Pojedynki Wygrane (Własne : Rywal)"
+                col_for = "Duels_Won"
+                col_opp = "Duels_Won_Against"
+                val_format = "int"
+
+            # xGOT (Post-shot xG)
+            elif any(w in q_norm for w in ["xgot", "post-shot", "post shot", "on target"]) or cr_paradox == "Niższe xGOT niż rywal":
+                metric_label = "xGOT (Własne : Rywal)"
+                col_for = "xGOT_For"
+                col_opp = "xGOT_Against"
+                val_format = "float"
+
+            # xG Set Play (stałe fragmenty gry)
             elif any(w in q_norm for w in ["set play", "setplay", "sfg", "stalych fragment", "stale fragmenty", "ze stalych"]) or cr_paradox == "Niższe xG ze SFG niż rywal":
-                if op_greater:
-                    base_matches = base_matches[base_matches["xG_SP_For"] > base_matches["xG_SP_Against"]]
-                else:
-                    base_matches = base_matches[base_matches["xG_SP_For"] < base_matches["xG_SP_Against"]]
-                paradox_desc += " xG ze Stałych Fragmentów (Set Play xG)"
+                metric_label = "xG Set Play (Własne : Rywal)"
+                col_for = "xG_SP_For"
+                col_opp = "xG_SP_Against"
+                val_format = "float"
 
-            # C. xG Open Play (gra otwarta)
+            # xG Open Play (gra otwarta)
             elif any(w in q_norm for w in ["open play", "openplay", "gry otwartej", "gra otwarta", "pozycyjn"]) or cr_paradox == "Niższe xG z gry otwartej (Open Play)":
-                if op_greater:
-                    base_matches = base_matches[base_matches["xG_OP_For"] > base_matches["xG_OP_Against"]]
-                else:
-                    base_matches = base_matches[base_matches["xG_OP_For"] < base_matches["xG_OP_Against"]]
-                paradox_desc += " xG z Gry Otwartej (Open Play xG)"
+                metric_label = "xG Open Play (Własne : Rywal)"
+                col_for = "xG_OP_For"
+                col_opp = "xG_OP_Against"
+                val_format = "float"
 
-            # D. npxG (bez rzutów karnych)
+            # npxG (bez rzutów karnych)
             elif any(w in q_norm for w in ["npxg", "non-penalty", "non penalty", "bez karnych"]) or cr_paradox == "Niższe npxG (bez karnych)":
-                if op_greater:
-                    base_matches = base_matches[base_matches["npxG_For"] > base_matches["npxG_Against"]]
-                else:
-                    base_matches = base_matches[base_matches["npxG_For"] < base_matches["npxG_Against"]]
-                paradox_desc += " npxG (xG bez rzutów karnych)"
+                metric_label = "npxG (Własne : Rywal)"
+                col_for = "npxG_For"
+                col_opp = "npxG_Against"
+                val_format = "float"
 
-            # E. Strzały z pola karnego
+            # Strzały z pola karnego
             elif any(w in q_norm for w in ["pola karnego", "szesnast"]) or cr_paradox == "Mniejsza liczba strzałów z szesnastki":
-                if op_greater:
-                    base_matches = base_matches[base_matches["Box_Shots"] > base_matches["Box_Shots_Against"]]
-                else:
-                    base_matches = base_matches[base_matches["Box_Shots"] < base_matches["Box_Shots_Against"]]
-                paradox_desc += " strzałów z pola karnego"
-                extra_metric_col = ("Box_Shots", "Box_Shots_Against")
-                extra_metric_title = "Strzały z pola"
+                metric_label = "Strzały z pola (Własne : Rywal)"
+                col_for = "Box_Shots"
+                col_opp = "Box_Shots_Against"
+                val_format = "int"
 
-            # F. Strzały ogółem
+            # Strzały ogółem
             elif "strzal" in q_norm or cr_paradox == "Mniejsza liczba oddanych strzałów":
-                if op_greater:
-                    base_matches = base_matches[base_matches["Shots"] > base_matches["Shots_Against"]]
-                else:
-                    base_matches = base_matches[base_matches["Shots"] < base_matches["Shots_Against"]]
-                paradox_desc += " oddanych strzałów ogółem"
-                extra_metric_col = ("Shots", "Shots_Against")
-                extra_metric_title = "Strzały ogółem"
+                metric_label = "Strzały ogółem (Własne : Rywal)"
+                col_for = "Shots"
+                col_opp = "Shots_Against"
+                val_format = "int"
 
-            # G. Posiadanie piłki
+            # Posiadanie piłki
             elif "posiadani" in q_norm or cr_paradox == "Niższe posiadanie piłki (< 50%)":
+                metric_label = "Posiadanie Piłki"
+                col_for = "Possession"
+                col_opp = None
+                val_format = "pct"
+
+            # Podania
+            elif "podan" in q_norm:
+                metric_label = "Podania (Własne : Rywal)"
+                col_for = "Passes_Total"
+                col_opp = "Passes_Total_Against"
+                val_format = "int"
+
+            # 5. Filtrowanie meczów wg wykrytej metryki i relacji (> lub <)
+            if col_opp:
                 if op_greater:
-                    base_matches = base_matches[base_matches["Possession"] > 52.0]
+                    base_matches = base_matches[base_matches[col_for] > base_matches[col_opp]]
                 else:
-                    base_matches = base_matches[base_matches["Possession"] < 48.0]
-                paradox_desc += " posiadania piłki"
-                extra_metric_col = "Possession"
-                extra_metric_title = "Posiadanie"
-
-            # H. Ogólne xG (sprawdzane na końcu)
-            elif any(w in q_norm for w in ["pomimo", "mimo", "xg"]) or cr_paradox == "Niższe xG ogólne niż rywal":
+                    base_matches = base_matches[base_matches[col_for] < base_matches[col_opp]]
+            elif col_for == "Possession":
                 if op_greater:
-                    base_matches = base_matches[base_matches["xG_For"] > base_matches["xG_Against"]]
+                    base_matches = base_matches[base_matches["Possession"] > 50.0]
                 else:
-                    base_matches = base_matches[base_matches["xG_For"] < base_matches["xG_Against"]]
-                paradox_desc += " ogólnego xG"
+                    base_matches = base_matches[base_matches["Possession"] < 50.0]
 
-            # 5. Anomalie vs średnia (np. podania)
-            if "podan" in q_norm and any(w in q_norm for w in ["roznila", "sredniej", "odchyl", "anomali"]) or cr_anomaly == "Anomalia Podań":
-                anomaly_rows = []
-                for _, r_row in base_matches.iterrows():
-                    tm = r_row["Team"]
-                    tm_mean = team_stats[team_stats["Team"] == tm]["Podania_ogolem"].values[0]
-                    diff_pct = abs(r_row["Passes_Total"] - tm_mean) / tm_mean
-                    if diff_pct >= 0.25:
-                        anomaly_rows.append(r_row)
-                base_matches = pd.DataFrame(anomaly_rows)
-                paradox_desc = "Mecze z anomalią podań (odchylenie o ≥ 25% od normy zespołu)"
-                extra_metric_col = ("Passes_Total", "Passes_Total_Against")
-                extra_metric_title = "Podania"
-
-            # 6. Prezentacja wyników
+            # 6. Prezentacja wyników – dokładnie 5 kolumn
             header_team = selected_team_filter if selected_team_filter else "Wszystkie Drużyny (Skala Ligi)"
             venue_txt = "Dom" if selected_venue_filter == "Home" else ("Wyjazd" if selected_venue_filter == "Away" else "Dom + Wyjazd")
 
             st.subheader(f"📋 Wyniki Wyszukiwania: {header_team}")
-            st.caption(f"Kryterium: **{paradox_desc}** | Miejsce: **{venue_txt}**")
+            st.caption(f"Kryterium: **{metric_label} ({comp_word})** | Miejsce: **{venue_txt}**")
 
             if len(base_matches) > 0:
                 st.success(f"🤖 **Znaleziono {len(base_matches)} spotkań** spełniających zadane kryteria!")
 
-                # Budowa pełnej tabeli z kompletnym podziałem na wszystkie metryki xG
                 table_rows = []
                 for _, r in base_matches.iterrows():
                     res_str = f"{int(r['Goals_For'])}:{int(r['Goals_Against'])}"
                     gdzie_str = "Dom" if r["Venue"] == "Home" else "Wyjazd"
 
-                    row_dict = {
+                    # Formatowanie szukanej statystyki
+                    if val_format == "float":
+                        stat_val_str = f"{r[col_for]:.2f} : {r[col_opp]:.2f}"
+                    elif val_format == "int":
+                        stat_val_str = f"{int(r[col_for])} : {int(r[col_opp])}"
+                    elif val_format == "pct":
+                        opp_poss = 100.0 - r["Possession"]
+                        stat_val_str = f"{r['Possession']:.1f}% : {opp_poss:.1f}%"
+
+                    table_rows.append({
                         "Drużyna": r["Team"],
                         "Gdzie": gdzie_str,
                         "Rywal": r["Opponent"],
                         "Wynik": res_str,
-                        "xG Total": f"{r['xG_For']:.2f} : {r['xG_Against']:.2f}",
-                        "xG Open Play": f"{r.get('xG_OP_For', 0.0):.2f} : {r.get('xG_OP_Against', 0.0):.2f}",
-                        "xG Set Play": f"{r.get('xG_SP_For', 0.0):.2f} : {r.get('xG_SP_Against', 0.0):.2f}",
-                        "npxG": f"{r.get('npxG_For', 0.0):.2f} : {r.get('npxG_Against', 0.0):.2f}",
-                        "xGOT": f"{r.get('xGOT_For', 0.0):.2f} : {r.get('xGOT_Against', 0.0):.2f}",
-                    }
-
-                    # Jeśli zapytanie dotyczyło dodatkowej metryki (np. strzałów czy posiadania), dopisujemy ją na końcu
-                    if extra_metric_col:
-                        if isinstance(extra_metric_col, tuple):
-                            col_f, col_a = extra_metric_col
-                            row_dict[extra_metric_title] = f"{int(r[col_f])} : {int(r[col_a])}"
-                        elif extra_metric_col == "Possession":
-                            row_dict[extra_metric_title] = f"{r['Possession']:.1f}%"
-
-                    table_rows.append(row_dict)
+                        metric_label: stat_val_str
+                    })
 
                 df_clean_result = pd.DataFrame(table_rows)
                 st.dataframe(df_clean_result, use_container_width=True, hide_index=True)
 
                 if not selected_team_filter:
-                    st.markdown("##### 🏆 Zestawienie: kto najczęściej notuje takie mecze?")
+                    st.markdown("##### 🏆 Kto najczęściej notuje takie mecze?")
                     top_counter = base_matches["Team"].value_counts().reset_index()
                     top_counter.columns = ["Drużyna", "Liczba takich spotkań"]
                     st.dataframe(top_counter, use_container_width=True, hide_index=True)
