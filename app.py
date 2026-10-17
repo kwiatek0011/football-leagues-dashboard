@@ -4383,16 +4383,31 @@ with tab_asystent_ai:
     q_norm = normalize_nlp(user_query) if user_query else ""
 
     # Ustalanie parametrów wyszukiwania
+    # Ustalanie parametrów wyszukiwania (albo z tekstu, albo z kreatora)
+    # 1. Drużyna (inteligentne dopasowanie bez kolizji 'City', 'United', 'Real' itp.)
     selected_team_filter = None
     if cr_team != "Wszystkie (Liga)":
         selected_team_filter = cr_team
     else:
-        for t_candidate in team_stats["Team"].unique():
-            t_clean = normalize_nlp(t_candidate)
-            words = t_clean.split()
-            if t_clean in q_norm or any(len(w) > 3 and w in q_norm for w in words):
-                selected_team_filter = t_candidate
+        # Słowa pospolite w nazwach klubów, które same w sobie NIE mogą decydować o trafieniu
+        GENERIC_CLUB_WORDS = {"city", "united", "town", "real", "fc", "gks", "ks", "de", "la", "cf", "ac", "inter", "sporting"}
+
+        # Krok 1: Szukamy pełnej nazwy drużyny (od najdłuższych nazw, aby 'Hull City' wygrało z 'City')
+        sorted_teams = sorted(team_stats["Team"].unique(), key=lambda x: len(normalize_nlp(x)), reverse=True)
+        for t_cand in sorted_teams:
+            t_clean = normalize_nlp(t_cand)
+            if t_clean in q_norm:
+                selected_team_filter = t_cand
                 break
+
+        # Krok 2: Jeśli nie wpisano pełnej nazwy, szukamy po unikalnym członie (np. samo 'Hull', 'Newcastle', 'Lech')
+        if not selected_team_filter:
+            for t_cand in sorted_teams:
+                t_clean = normalize_nlp(t_cand)
+                unique_words = [w for w in t_clean.split() if len(w) >= 3 and w not in GENERIC_CLUB_WORDS]
+                if any(w in q_norm for w in unique_words):
+                    selected_team_filter = t_cand
+                    break
 
     selected_venue_filter = None
     if "u siebie" in cr_venue.lower() or any(w in q_norm for w in ["u siebie", "dom", "domu", "domowe", "gospodarz"]):
