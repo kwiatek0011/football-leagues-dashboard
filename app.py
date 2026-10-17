@@ -4312,12 +4312,22 @@ with tab_asystent_ai:
         if st.button("📈 Mecze z anomalią podań vs średnia", on_click=set_prompt, args=("mecze gdzie ilość podań różniła się od średniej",), use_container_width=True):
             pass
 
-    # Pasek wyszukiwarki
-    user_query = st.text_input(
-        "🔎 Wpisz swoje zapytanie (np. mecze Lecha Poznań wygrane pomimo mniejszej liczby strzałów):",
-        placeholder="np. mecze Lecha Poznań wygrane pomimo niższego xG, serie wygranych na wyjeździe 2 meczowe...",
-        key="txt_ai_scout_query"
-    )
+    # 2. Pasek wyszukiwarki w niezawodnym formularzu (st.form)
+    with st.form(key="ai_scout_search_form", clear_on_submit=False):
+        c_input, c_btn = st.columns([4, 1])
+        with c_input:
+            user_query = st.text_input(
+                "🔎 Wpisz swoje zapytanie do AI:" if selected_lang == "PL" else "🔎 Enter your query for the AI Scout:",
+                value=st.session_state.get("txt_ai_scout_query", ""),
+                placeholder="np. mecze Evertonu wygrane mając więcej podań, mecze wygrane z niższym xG...",
+                label_visibility="collapsed"
+            )
+        with c_btn:
+            submitted = st.form_submit_button("🔍 Szukaj" if selected_lang == "PL" else "🔍 Search", use_container_width=True)
+
+    # Aktualizacja stanu po zatwierdzeniu formularza
+    if submitted or user_query:
+        st.session_state["txt_ai_scout_query"] = user_query
 
     # Rozwijany kreator filtrów (alternatywa do wpisywania)
     with st.expander("🛠️ Kliknij tutaj, jeśli wolisz precyzyjnie wyklikać filtry zamiast pisać"):
