@@ -4277,219 +4277,282 @@ with tab_analiza_ligowa:
 
 
 # =========================================================================
-# ZAKŁADKA: ASYSTENT AI / WYSZUKIWARKA TAKTYCZNA (AI SCOUT COPILOT)
+# ZAKŁADKA: ASYSTENT AI & ZAAWANSOWANA WYSZUKIWARKA MECZOWA
 # =========================================================================
 with tab_asystent_ai:
-    st.header(" Inteligentny Asystent Analityczny (AI Scout Copilot)" if selected_lang == "PL" else " Intelligent Tactical Scout Copilot")
+    st.header("🤖 Inteligentny Asystent Analityczny & Wyszukiwarka Meczowa" if selected_lang == "PL" else "🤖 AI Tactical Scout & Advanced Match Query Engine")
     st.caption(
-        "Zadaj pytanie w języku naturalnym dotyczące aktualnie wybranej ligi. Silnik analityczny AI przeszuka bazę meczową i wygeneruje dedykowany raport."
+        "Zadaj dowolne pytanie w języku naturalnym lub skorzystaj z filtrów: badaj serie zwycięstw dom/wyjazd, mecze wygrane pomimo gorszych statystyk (xG, strzały z szesnastki) oraz anomalie."
         if selected_lang == "PL" else
-        "Ask questions in natural language about the current league. The AI analytics engine parses your query, runs calculations, and generates answers."
+        "Search match data in natural language or use tactical filters: analyze home/away winning streaks, paradox matches won against xG/shot metrics, and statistical anomalies."
     )
 
-    # Inicjalizacja stanu zapytania w sesji
     if "txt_ai_scout_query" not in st.session_state:
         st.session_state["txt_ai_scout_query"] = ""
 
-    # Funkcja pomocnicza do obsługi kliknięcia w gotowe pytania
     def set_prompt(prompt_text):
         st.session_state["txt_ai_scout_query"] = prompt_text
 
-    # 1. Sugestie szybkich pytań (Quick Prompts) z działającym klikiem
-    st.markdown("##### 💡 Przykładowe zapytania (kliknij, aby zapytać):" if selected_lang == "PL" else "##### 💡 Sample queries (click to run):")
-    
+    # Szybkie kafelki z przykładami zapytań
+    st.markdown("##### 💡 Przykłady zapytań do przetestowania (kliknij, aby uruchomić):")
     col_q1, col_q2, col_q3 = st.columns(3)
-    
     with col_q1:
-        if st.button("🏠 Kto tworzy większe xG u siebie niż na wyjeździe?", on_click=set_prompt, args=("kto tworzy większe xg u siebie niż na wyjeździe",), use_container_width=True):
+        if st.button("🏆 Serie zwycięstw u siebie (min. 3 mecze)", on_click=set_prompt, args=("serie zwycięstw u siebie 3 meczowe",), use_container_width=True):
             pass
-        if st.button("🎯 Kto strzela ponad stan (Gole - xG)?", on_click=set_prompt, args=("kto strzela ponad stan",), use_container_width=True):
+        if st.button("🚌 Serie zwycięstw na wyjeździe (min. 2 mecze)", on_click=set_prompt, args=("serie zwycięstw na wyjeździe 2 meczowe",), use_container_width=True):
             pass
-        if st.button("🥊 Kto oddaje najwięcej strzałów z pola karnego?", on_click=set_prompt, args=("kto oddaje najwięcej strzałów z pola karnego",), use_container_width=True):
-            pass
-            
     with col_q2:
-        if st.button("🚀 Kto jest najgroźniejszy po stałych fragmentach?", on_click=set_prompt, args=("kto jest najgroźniejszy ze stałych fragmentów",), use_container_width=True):
+        if st.button("🎯 Wygrane pomimo niższego xG (Smash & Grab)", on_click=set_prompt, args=("mecze wygrane pomimo niższego xg",), use_container_width=True):
             pass
-        if st.button("🛡️ Kto dopuszcza najmniej strzałów z szesnastki?", on_click=set_prompt, args=("kto dopuszcza najmniej strzałów z szesnastki",), use_container_width=True):
+        if st.button("🥊 Wygrane pomimo mniejszej liczby strzałów w polu", on_click=set_prompt, args=("mecze wygrane pomimo mniejszej ilości strzałów z pola karnego",), use_container_width=True):
             pass
-        if st.button("🚫 Kto marnuje najwięcej stuprocentowych szans?", on_click=set_prompt, args=("kto marnuje najwięcej setek",), use_container_width=True):
-            pass
-            
     with col_q3:
-        if st.button("🔭 Kto gra najbardziej bezpośrednio (długie piłki)?", on_click=set_prompt, args=("kto gra najwięcej długich piłek",), use_container_width=True):
+        if st.button("⚽ Wyjazdy z min. 1 strzelonym golem", on_click=set_prompt, args=("mecze na wyjeździe z min jednym strzelonym golem",), use_container_width=True):
             pass
-        if st.button("🧤 Kto ma najlepszego bramkarza (uratowane gole)?", on_click=set_prompt, args=("kto ma najlepszego bramkarza",), use_container_width=True):
-            pass
-        if st.button("🟡 Kto gra najbardziej agresywnie i fauluje?", on_click=set_prompt, args=("kto najczęściej fauluje i łapie kartki",), use_container_width=True):
+        if st.button("📈 Mecze z anomalią podań vs średnia", on_click=set_prompt, args=("mecze gdzie ilość podań różniła się od średniej",), use_container_width=True):
             pass
 
-    # 2. Pasek wyszukiwarki tekstowej
+    # Pasek wyszukiwarki
     user_query = st.text_input(
-        "🔎 Wpisz swoje zapytanie do AI:" if selected_lang == "PL" else "🔎 Enter your query for the AI Scout:",
-        placeholder="np. kto oddaje najwięcej strzałów z pola karnego, kto ma najlepszą obronę...",
+        "🔎 Wpisz swoje zapytanie (np. mecze Lecha Poznań wygrane pomimo mniejszej liczby strzałów):",
+        placeholder="np. mecze Lecha Poznań wygrane pomimo niższego xG, serie wygranych na wyjeździe 2 meczowe...",
         key="txt_ai_scout_query"
     )
 
-    # 3. Zaawansowany silnik rozpoznawania intencji (Fuzzy & Stemming NLP)
-    def normalize_nlp(text):
-        text = text.lower()
-        replacements = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
-        for k, v in replacements.items():
-            text = text.replace(k, v)
-        return text
-
-    if user_query:
-        q_norm = normalize_nlp(user_query)
-        st.markdown("---")
-        
-        # Rozpoznanie kierunku: czy użytkownik pyta o minimum/najmniej/najgorzej?
-        is_bottom = any(w in q_norm for w in ["najmniej", "najgors", "najslabs", "dol", "dno", "least", "worst", "fewest"])
-
-        # INTENCJA 1: Dom vs Wyjazd
-        if any(w in q_norm for w in ["dom", "wyjazd", "siebie", "home", "away", "gospodarz"]):
-            st.subheader("🏠 Analiza Przewagi Własnego Boiska (xG Dom vs Wyjazd)")
-            venue_grp = matches_df.groupby(["Team", "Venue"]).agg(xG_mean=("xG_For", "mean")).unstack()
-            v_df = pd.DataFrame({
-                "Team": venue_grp.index,
-                "xG_Dom": venue_grp[("xG_mean", "Home")].round(2),
-                "xG_Wyjazd": venue_grp[("xG_mean", "Away")].round(2),
-            }).reset_index(drop=True)
-            v_df["Różnica (Dom - Wyjazd)"] = (v_df["xG_Dom"] - v_df["xG_Wyjazd"]).round(2)
-            v_df = v_df.sort_values(by="Różnica (Dom - Wyjazd)", ascending=is_bottom).reset_index(drop=True)
-            
-            top_row = v_df.iloc[0]
-            if not is_bottom:
-                st.success(f"🤖 **Wnioski AI:** Największą przewagę własnego boiska ma **{top_row['Team']}**, tworząc u siebie aż o **{top_row['Różnica (Dom - Wyjazd)']:+.2f} xG/mecz** więcej niż na wyjazdach!")
-            else:
-                st.warning(f"🤖 **Wnioski AI:** Najgorzej u siebie (względem wyjazdów) spisuje się **{top_row['Team']}** (bilans Dom - Wyjazd: **{top_row['Różnica (Dom - Wyjazd)']:+.2f} xG**).")
-            
-            st.dataframe(v_df, use_container_width=True, hide_index=True)
-
-        # INTENCJA 2: Strzały z dystansu / zza pola karnego
-        elif any(w in q_norm for w in ["dystans", "zza pola", "daleka", "long range", "outside box"]):
-            st.subheader("🚀 Strzały zza Pola Karnego (Uderzenia z Dystansu)")
-            df_s = team_stats.sort_values(by="Strzaly_zza_pola_karnego", ascending=is_bottom)[["Team", "Mecze", "Strzaly_zza_pola_karnego", "Strzaly_na_mecz"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** {'Najczęściej' if not is_bottom else 'Najrzadziej'} z dystansu uderza **{top_r['Team']}** (średnio **{top_r['Strzaly_zza_pola_karnego']:.2f}** strzałów zza pola karnego na mecz).")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 3: Strzały z pola karnego / szesnastka (OBRONA)
-        elif any(w in q_norm for w in ["pola karnego", "polu karnym", "pole karne", "szesnas", "box"]) and any(w in q_norm for w in ["obron", "dopuszcz", "przeciw", "traci", "broni"]):
-            st.subheader("🛡️ Szczelność Pola Karnego: Strzały Dopuszczone z Szesnastki")
-            df_s = team_stats.sort_values(by="Box_Shots_Against_Mean", ascending=not is_bottom)[["Team", "Mecze", "Box_Shots_Against_Mean", "Box_Touches_Against_Mean"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** Najszczelniejszą szesnastkę w lidze ma **{top_r['Team']}**, dopuszczając zaledwie **{top_r['Box_Shots_Against_Mean']:.1f}** uderzeń z pola karnego na mecz!")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 4: Strzały z pola karnego / szesnastka (ATAK) -> Dokładnie to, o co pytałeś!
-        elif any(w in q_norm for w in ["pola karnego", "polu karnym", "pole karne", "szesnas", "box"]):
-            st.subheader("🥊 Obecność i Strzały z Pola Karnego (Atak w Szesnastce)")
-            df_s = team_stats.sort_values(by="Strzaly_z_pola_karnego", ascending=is_bottom)[["Team", "Mecze", "Strzaly_z_pola_karnego", "Box_Touches_Mean", "Gole_na_mecz"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** Liderem pod względem uderzeń z pola karnego jest **{top_r['Team']}** – oddaje średnio **{top_r['Strzaly_z_pola_karnego']:.1f}** strzałów z szesnastki przy **{top_r['Box_Touches_Mean']:.1f}** kontaktach!")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 5: Stałe fragmenty gry (SFG)
-        elif any(w in q_norm for w in ["stale", "stalych", "sfg", "rozne", "rozn", "corner", "set play", "woln"]):
-            if any(w in q_norm for w in ["traci", "dopuszcz", "obron", "against"]):
-                st.subheader("⚠️ Dopuszczone Zagrożenie ze Stałych Fragmentów Gry (xGA SFG)")
-                df_s = team_stats.sort_values(by="xGA_SP_na_mecz", ascending=False)[["Team", "Mecze", "xGA_SP_na_mecz", "Gole_stracone_na_mecz"]].reset_index(drop=True)
-                top_r = df_s.iloc[0]
-                st.warning(f"🤖 **Wnioski AI:** Największe problemy przy obronie SFG ma **{top_r['Team']}**, dopuszczając aż **{top_r['xGA_SP_na_mecz']:.2f} xGA** na mecz.")
-            else:
-                st.subheader("🚀 Groźność po Stałych Fragmentach Gry (xG SFG)")
-                df_s = team_stats.sort_values(by="xG_SP_na_mecz", ascending=is_bottom)[["Team", "Mecze", "xG_SP_na_mecz", "xG_na_mecz"]].reset_index(drop=True)
-                top_r = df_s.iloc[0]
-                st.success(f"🤖 **Wnioski AI:** Najgroźniejszą bronią po stałych fragmentach dysponuje **{top_r['Team']}** (średnio **{top_r['xG_SP_na_mecz']:.2f} xG** z SFG na mecz).")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 6: Niewykorzystane okazje / Marnowanie setek
-        elif any(w in q_norm for w in ["marnu", "setek", "setki", "pudlu", "niewykorzyst", "underperformance", "zmarnow"]):
-            st.subheader("❌ Niewykorzystane Okazje: Zmarnowane Wielkie Szanse & Underperformance")
-            df_s = team_stats.sort_values(by="Big_Chances_Missed", ascending=not is_bottom)[["Team", "Mecze", "Big_Chances_Missed", "Big_Chances", "Gole_minus_xG"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.error(f"🤖 **Wnioski AI:** Najwięcej 'setek' marnuje **{top_r['Team']}** – średnio aż **{top_r['Big_Chances_Missed']:.2f}** zmarnowanych wielkich szans na mecz!")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 7: Overperformance / Snajperzy ponad stan
-        elif any(w in q_norm for w in ["overperformance", "ponad stan", "skuteczn", "wykonczen", "finisz", "snajper"]):
-            st.subheader("🎯 Zabójcza Skuteczność: Gole Zdobyte ponad wskaźnik xG")
-            df_s = team_stats.sort_values(by="Gole_minus_xG", ascending=is_bottom)[["Team", "Mecze", "Gole_Strzelone", "xG_Suma", "Gole_minus_xG"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** Największy overperformance notuje **{top_r['Team']}**, strzelając aż o **{top_r['Gole_minus_xG']:+.2f}** gola więcej, niż wynosiło ich łączne xG!")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 8: Czyste konta (Clean Sheets)
-        elif any(w in q_norm for w in ["czyst", "kont", "clean sheet", "zero z tylu"]):
-            st.subheader("🛡️ Czyste Konta: Mecze bez straty bramki")
-            df_s = team_stats.sort_values(by="Clean_Sheets", ascending=is_bottom)[["Team", "Mecze", "Clean_Sheets", "Clean_Sheets_Pct", "Gole_Stracone"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** Najwięcej czystych kont zachował zespół **{top_r['Team']}** ({int(top_r['Clean_Sheets'])} meczów bez straty gola, czyli w **{top_r['Clean_Sheets_Pct']:.1f}%** spotkań).")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 9: Posiadanie piłki
-        elif any(w in q_norm for w in ["posiadani", "utrzymuj", "kontrola pilk", "possession"]):
-            st.subheader("⚽ Kontrola Meczu: Średnie Posiadanie Piłki (%)")
-            df_s = team_stats.sort_values(by="Posiadanie", ascending=is_bottom)[["Team", "Mecze", "Posiadanie", "Podania_ogolem"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** {'Najdłużej przy piłce utrzymuje się' if not is_bottom else 'Najniższe posiadanie piłki ma'} **{top_r['Team']}** (średnio **{top_r['Posiadanie']:.1f}%** posiadania).")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 10: Długie piłki / styl bezpośredni
-        elif any(w in q_norm for w in ["dlug", "laga", "bezposredn", "long ball", "direct"]):
-            st.subheader("🔭 Styl Gry: Celne Długie Podania (Long Balls)")
-            df_s = team_stats.sort_values(by="Long_Balls_Mean", ascending=is_bottom)[["Team", "Mecze", "Long_Balls_Mean", "Udzial_dlugich_pilek_proc", "Posiadanie"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** Najbardziej bezpośredni futbol preferuje **{top_r['Team']}** (średnio **{top_r['Long_Balls_Mean']:.1f}** długich piłek na mecz).")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 11: Bramkarz / Obrony / Uratowane gole
-        elif any(w in q_norm for w in ["bramkarz", "keeper", "obron", "interwencj", "saves", "prevented"]):
-            st.subheader("🧤 Postawa Bramkarza: Uratowane Bramki (Goals Prevented)")
-            df_s = team_stats.sort_values(by="Goals_Prevented_Suma", ascending=is_bottom)[["Team", "Mecze", "Keeper_Saves_Mean", "Goals_Prevented_Suma", "Goals_Prevented_Mecz"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** Najwięcej goli ponad stan wybronił bramkarz drużyny **{top_r['Team']}** (uratował zespół przed utratą **{top_r['Goals_Prevented_Suma']:+.2f}** gola).")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 12: Faule / Kartki / Agresja
-        elif any(w in q_norm for w in ["faul", "kartk", "czerwon", "zolt", "agresywn", "brutaln", "foul", "cards"]):
-            st.subheader("🟡 Dyscyplina: Faule i Żółte Kartki")
-            df_s = team_stats.sort_values(by="Fouls_Mean", ascending=is_bottom)[["Team", "Mecze", "Fouls_Mean", "Yellow_Cards_Mean", "Red_Cards_Sum"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.warning(f"🤖 **Wnioski AI:** Najbardziej agresywnie gra **{top_r['Team']}** – popełnia średnio **{top_r['Fouls_Mean']:.1f}** fauli oraz łapie **{top_r['Yellow_Cards_Mean']:.1f}** kartek na mecz.")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 13: Kreacja xG / Najlepszy atak
-        elif any(w in q_norm for w in ["tworzy xg", "kreuj", "zagrozen", "najlepszy atak", "najgrozniejsz", "bramkostrzel"]):
-            st.subheader("⚽ Siła Ognia: Jakość Kreacji xG (Expected Goals)")
-            df_s = team_stats.sort_values(by="xG_na_mecz", ascending=is_bottom)[["Team", "Mecze", "xG_na_mecz", "Gole_na_mecz", "Strzaly_na_mecz"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** Najgroźniejszą ofensywą dysponuje **{top_r['Team']}**, generując średnio **{top_r['xG_na_mecz']:.2f} xG** na mecz.")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # INTENCJA 14: Obrona / Dopuszczone xGA
-        elif any(w in q_norm for w in ["obron", "defensyw", "xga", "traci bram"]):
-            st.subheader("🛡️ Szczelność Defensywy: Dopuszczona Jakość Szans (xGA)")
-            df_s = team_stats.sort_values(by="xGA_na_mecz", ascending=not is_bottom)[["Team", "Mecze", "xGA_na_mecz", "Gole_stracone_na_mecz", "Clean_Sheets"]].reset_index(drop=True)
-            top_r = df_s.iloc[0]
-            st.success(f"🤖 **Wnioski AI:** Najszczelniejszą defensywę ma **{top_r['Team']}**, dopuszczając zaledwie **{top_r['xGA_na_mecz']:.2f} xGA** na mecz.")
-            st.dataframe(df_s, use_container_width=True, hide_index=True)
-
-        # BRAK DOPASOWANIA (Fallback)
-        else:
-            st.info(
-                f"🤔 **AI Scout:** Nie rozpoznałem dokładnie zapytania: *„{user_query}”*.\n\n"
-                "**Spróbuj zadać pytanie o:**\n"
-                "- Strzały z pola karnego (np. *kto oddaje najwięcej strzałów z pola karnego*)\n"
-                "- Grę u siebie vs na wyjeździe (np. *kto u siebie tworzy większe xG niż na wyjeździe*)\n"
-                "- Strzały z dystansu (np. *kto najczęściej uderza zza pola karnego*)\n"
-                "- Stałe fragmenty gry (np. *kto ma najlepsze SFG*)\n"
-                "- Skuteczność wykończenia (np. *overperformance, kto marnuje setki*)\n"
-                "- Posiadanie piłki i styl gry (np. *kto gra najwięcej długich piłek*)\n"
-                "- Bramkarzy (np. *kto ma najlepszego bramkarza*)\n"
-                "- Dyscyplinę (np. *kto najczęściej fauluje*)"
+    # Rozwijany kreator filtrów (alternatywa do wpisywania)
+    with st.expander("🛠️ Kliknij tutaj, jeśli wolisz precyzyjnie wyklikać filtry zamiast pisać"):
+        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+        with col_f1:
+            team_choices = ["Wszystkie (Liga)"] + sorted(team_stats["Team"].unique().tolist())
+            cr_team = st.selectbox("Drużyna:", team_choices, index=0, key="cr_sb_team")
+            cr_venue = st.selectbox("Miejsce meczu:", ["Wszystkie", "Tylko u siebie (Home)", "Tylko na wyjeździe (Away)"], index=0, key="cr_sb_venue")
+        with col_f2:
+            cr_result = st.selectbox("Wynik meczu:", ["Dowolny", "Tylko Wygrane (3 pkt)", "Tylko Remisy (1 pkt)", "Tylko Porażki (0 pkt)"], index=0, key="cr_sb_res")
+            cr_goals_cond = st.selectbox("Warunek bramkowy:", ["Dowolny", "Min. 1 strzelony gol", "Min. 1 stracony gol", "Czyste konto (0 straconych)", "Obie strzeliły (BTTS)"], index=0, key="cr_sb_goals")
+        with col_f3:
+            cr_paradox = st.selectbox(
+                "Wygrana pomimo gorszych statystyk:",
+                [
+                    "Brak (Dowolne)",
+                    "Niższe xG ogólne niż rywal",
+                    "Niższe xG z gry otwartej (Open Play)",
+                    "Niższe xG ze SFG niż rywal",
+                    "Mniejsza liczba oddanych strzałów",
+                    "Mniejsza liczba strzałów z szesnastki",
+                    "Niższe posiadanie piłki (< 50%)"
+                ],
+                index=0, key="cr_sb_paradox"
             )
+            cr_anomaly = st.selectbox(
+                "Anomalie vs norma zespołu (>25% odchyłki):",
+                ["Brak", "Anomalia Podań", "Anomalia Strzałów", "Anomalia Fauli", "Anomalia xG"],
+                index=0, key="cr_sb_anom"
+            )
+        with col_f4:
+            cr_is_streak = st.checkbox("Badaj serie meczowe", value=False, key="cr_cb_streak")
+            cr_streak_len = st.slider("Minimalna długość serii:", min_value=1, max_value=8, value=3, step=1, key="cr_sl_streak")
+
+    # =========================================================
+    # SILNIK PARSUJĄCY I WYKONUJĄCY ZAPYTANIA
+    # =========================================================
+    def normalize_nlp(txt):
+        txt = str(txt).lower()
+        rep = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
+        for k, v in rep.items():
+            txt = txt.replace(k, v)
+        return txt
+
+    q_norm = normalize_nlp(user_query) if user_query else ""
+
+    # Ustalanie parametrów wyszukiwania (albo z tekstu, albo z kreatora)
+    # 1. Drużyna
+    selected_team_filter = None
+    if cr_team != "Wszystkie (Liga)":
+        selected_team_filter = cr_team
+    else:
+        for t_candidate in team_stats["Team"].unique():
+            t_clean = normalize_nlp(t_candidate)
+            words = t_clean.split()
+            if t_clean in q_norm or any(len(w) > 3 and w in q_norm for w in words):
+                selected_team_filter = t_candidate
+                break
+
+    # 2. Miejsce (Venue)
+    selected_venue_filter = None
+    if "u siebie" in cr_venue.lower() or any(w in q_norm for w in ["u siebie", "dom", "domu", "domowe", "gospodarz"]):
+        selected_venue_filter = "Home"
+    elif "wyjeździe" in cr_venue.lower() or any(w in q_norm for w in ["na wyjezdzie", "wyjazd", "wyjazdowe", "delegacj", "gosc"]):
+        selected_venue_filter = "Away"
+
+    # 3. Czy zapytanie dotyczy serii (Streaks)?
+    detect_streak = cr_is_streak or any(w in q_norm for w in ["seri", "streak", "z rzedu", "pod rzad", "kolejnych"])
+    streak_target_len = cr_streak_len
+    num_map = {
+        "jedno": 1, "jeden": 1, "1": 1,
+        "dwu": 2, "dwa": 2, "dwie": 2, "dwuch": 2, "2": 2,
+        "trzy": 3, "trzech": 3, "troj": 3, "3": 3,
+        "cztero": 4, "cztery": 4, "czterech": 4, "4": 4,
+        "piecio": 5, "piec": 5, "pieciu": 5, "5": 5,
+        "szescio": 6, "szesc": 6, "szesciu": 6, "6": 6,
+        "siedmio": 7, "siedem": 7, "7": 7
+    }
+    for k_num, v_num in num_map.items():
+        if k_num in q_norm:
+            streak_target_len = v_num
+            break
+
+    # 4. Sprawdzanie czy uruchamiamy analizę
+    has_active_query = bool(user_query or cr_team != "Wszystkie (Liga)" or cr_venue != "Wszystkie" or cr_result != "Dowolny" or cr_paradox != "Brak (Dowolne)" or cr_anomaly != "Brak" or cr_is_streak)
+
+    if has_active_query:
+        st.markdown("---")
+
+        # TRYB A: BADANIE SERII MECZOWYCH (STREAKS)
+        if detect_streak:
+            venue_label = "U Siebie (Dom)" if selected_venue_filter == "Home" else ("Na Wyjeździe" if selected_venue_filter == "Away" else "Ogólne (Dom + Wyjazd)")
+            st.subheader(f"🔥 Serie Zwycięstw: {venue_label} (Długość: min. {streak_target_len} meczów)")
+
+            streak_records = []
+            pool_teams = [selected_team_filter] if selected_team_filter else team_stats["Team"].unique()
+
+            for tm in pool_teams:
+                tm_matches = matches_df[matches_df["Team"] == tm].copy().reset_index(drop=True)
+                if selected_venue_filter:
+                    tm_matches = tm_matches[tm_matches["Venue"] == selected_venue_filter].reset_index(drop=True)
+
+                current_streak = []
+                for idx, r_m in tm_matches.iterrows():
+                    if r_m["Points"] == 3:
+                        current_streak.append(r_m)
+                    else:
+                        if len(current_streak) >= streak_target_len:
+                            streak_records.append({"Team": tm, "Length": len(current_streak), "Matches": list(current_streak)})
+                        current_streak = []
+                if len(current_streak) >= streak_target_len:
+                    streak_records.append({"Team": tm, "Length": len(current_streak), "Matches": list(current_streak)})
+
+            if streak_records:
+                st.success(f"🤖 **Znaleziono {len(streak_records)} serii** spełniających kryteria (długość $\ge {streak_target_len}$ meczów z rzędu).")
+                for s_idx, st_data in enumerate(streak_records, 1):
+                    team_name = st_data["Team"]
+                    s_len = st_data["Length"]
+                    
+                    st.markdown(
+                        f"""<div style="background-color: #161B22; border-left: 4px solid #10B981; border-radius: 6px; padding: 10px 14px; margin-bottom: 6px;">
+                            <span style="font-weight: 800; color: #10B981; font-size: 14px;">#{s_idx} {team_name} – Seria {s_len} Zwycięstw z rzędu ({venue_label})</span>
+                        </div>""",
+                        unsafe_allow_html=True
+                    )
+                    
+                    # Wypisujemy mecze składające się na serię
+                    match_chips = []
+                    for m_s in st_data["Matches"]:
+                        v_str = "D" if m_s["Venue"] == "Home" else "W"
+                        res_str = f"{int(m_s['Goals_For'])}:{int(m_s['Goals_Against'])}"
+                        match_chips.append(f"vs {m_s['Opponent']} ({v_str}) [{res_str}]")
+                    st.info(" ➔ ".join(match_chips))
+            else:
+                st.warning(f"Brak serii zwycięstw o długości co najmniej {streak_target_len} meczów dla wybranego filtra ({venue_label}).")
+
+        # TRYB B: FILTROWANIE MECZÓW (PARADOKSY, ANOMALIE, BRAMKI)
+        else:
+            base_matches = matches_df.copy()
+            if selected_team_filter:
+                base_matches = base_matches[base_matches["Team"] == selected_team_filter]
+            if selected_venue_filter:
+                base_matches = base_matches[base_matches["Venue"] == selected_venue_filter]
+
+            # 1. Wynik (Wygrana / Remis / Porażka)
+            if "wygran" in q_norm or "zwycies" in q_norm or cr_result == "Tylko Wygrane (3 pkt)":
+                base_matches = base_matches[base_matches["Points"] == 3]
+            elif "remis" in q_norm or cr_result == "Tylko Remisy (1 pkt)":
+                base_matches = base_matches[base_matches["Points"] == 1]
+            elif "poraz" in q_norm or "przegran" in q_norm or cr_result == "Tylko Porażki (0 pkt)":
+                base_matches = base_matches[base_matches["Points"] == 0]
+
+            # 2. Bramki strzelone / stracone
+            if "min jednym strzelonym" in q_norm or "ze strzelonym golem" in q_norm or cr_goals_cond == "Min. 1 strzelony gol":
+                base_matches = base_matches[base_matches["Goals_For"] >= 1]
+            if "min jednym straconym" in q_norm or "ze straconym golem" in q_norm or cr_goals_cond == "Min. 1 stracony gol":
+                base_matches = base_matches[base_matches["Goals_Against"] >= 1]
+            if "czystym kontem" in q_norm or "bez straty gola" in q_norm or cr_goals_cond == "Czyste konto (0 straconych)":
+                base_matches = base_matches[base_matches["Goals_Against"] == 0]
+            if "btts" in q_norm or "obie strzelily" in q_norm or cr_goals_cond == "Obie strzeliły (BTTS)":
+                base_matches = base_matches[(base_matches["Goals_For"] >= 1) & (base_matches["Goals_Against"] >= 1)]
+
+            # 3. Paradoksy statystyk ("Pomimo...")
+            paradox_desc = "Standardowe mecze"
+            
+            # xG ze stałych fragmentów
+            if any(w in q_norm for w in ["sfg", "stalych fragment", "stalego fragmentu"]) and any(w in q_norm for w in ["pomimo", "mimo", "nizsz", "mniej"]) or cr_paradox == "Niższe xG ze SFG niż rywal":
+                base_matches = base_matches[base_matches["xG_SP_For"] < base_matches["xG_SP_Against"]]
+                paradox_desc = "Wygrane/Mecze pomimo NIŻSZEGO xG ze Stałych Fragmentów Gry"
+            # xG z gry otwartej
+            elif any(w in q_norm for w in ["open play", "gry otwartej", "ataku pozycyjn"]) and any(w in q_norm for w in ["pomimo", "mimo", "nizsz", "mniej"]) or cr_paradox == "Niższe xG z gry otwartej (Open Play)":
+                base_matches = base_matches[base_matches["xG_OP_For"] < base_matches["xG_OP_Against"]]
+                paradox_desc = "Wygrane/Mecze pomimo NIŻSZEGO xG z Gry Otwartej (Open Play)"
+            # Strzały z pola karnego
+            elif any(w in q_norm for w in ["pola karnego", "szesnast"]) and any(w in q_norm for w in ["pomimo", "mimo", "mniej", "nizsz"]) or cr_paradox == "Mniejsza liczba strzałów z szesnastki":
+                base_matches = base_matches[base_matches["Box_Shots"] < base_matches["Box_Shots_Against"]]
+                paradox_desc = "Wygrane/Mecze pomimo MNIEJSZEJ ilości strzałów z pola karnego niż rywal"
+            # Mniej strzałów ogółem
+            elif any(w in q_norm for w in ["strzal"]) and any(w in q_norm for w in ["pomimo", "mimo", "mniej", "nizsz"]) or cr_paradox == "Mniejsza liczba oddanych strzałów":
+                base_matches = base_matches[base_matches["Shots"] < base_matches["Shots_Against"]]
+                paradox_desc = "Wygrane/Mecze pomimo MNIEJSZEJ liczby oddanych strzałów"
+            # Mniejsze posiadanie piłki
+            elif any(w in q_norm for w in ["posiadani"]) and any(w in q_norm for w in ["pomimo", "mimo", "mniej", "nizsz"]) or cr_paradox == "Niższe posiadanie piłki (< 50%)":
+                base_matches = base_matches[base_matches["Possession"] < 48.0]
+                paradox_desc = "Wygrane/Mecze pomimo NIŻSZEGO posiadania piłki (< 48%)"
+            # Niższe ogólne xG
+            elif any(w in q_norm for w in ["pomimo", "mimo", "nizszego xg", "mniejszego xg"]) or cr_paradox == "Niższe xG ogólne niż rywal":
+                base_matches = base_matches[base_matches["xG_For"] < base_matches["xG_Against"]]
+                paradox_desc = "Wygrane/Mecze pomimo NIŻSZEGO xG (xG Smash & Grab)"
+
+            # 4. Anomalie statystyczne (np. ilość podań różniła się od średniej o min. 25%)
+            if "podan" in q_norm and any(w in q_norm for w in ["roznila", "sredniej", "odchyl", "anomali"]) or cr_anomaly == "Anomalia Podań":
+                anomaly_rows = []
+                for _, r_row in base_matches.iterrows():
+                    tm = r_row["Team"]
+                    tm_mean = team_stats[team_stats["Team"] == tm]["Podania_ogolem"].values[0]
+                    diff_pct = abs(r_row["Passes_Total"] - tm_mean) / tm_mean
+                    if diff_pct >= 0.25:  # odchyłka o co najmniej 25%
+                        anomaly_rows.append(r_row)
+                base_matches = pd.DataFrame(anomaly_rows)
+                paradox_desc = "Mecze z anomalią wolumenu podań (odchylenie o $\ge 25\%$ od normy)"
+
+            # Wyświetlenie wyników
+            header_team = selected_team_filter if selected_team_filter else "Wszystkie Drużyny (Skala Ligi)"
+            st.subheader(f"📋 Wyniki Wyszukiwania: {header_team}")
+            st.caption(f"Kryterium: **{paradox_desc}** | Miejsce: **{selected_venue_filter if selected_venue_filter else 'Dom + Wyjazd'}**")
+
+            if len(base_matches) > 0:
+                st.success(f"🤖 **Znaleziono {len(base_matches)} spotkań** spełniających zadane kryteria!")
+                
+                # Przygotowanie czytelnej tabeli wynikowej
+                display_cols = [
+                    "Team", "Venue", "Opponent", "Goals_For", "Goals_Against",
+                    "xG_For", "xG_Against", "Shots", "Shots_Against", "Box_Shots", "Box_Shots_Against", "Possession"
+                ]
+                
+                df_found = base_matches[[c for c in display_cols if c in base_matches.columns]].copy()
+                df_found["Wynik"] = [f"{int(r['Goals_For'])}:{int(r['Goals_Against'])}" for _, r in df_found.iterrows()]
+                df_found["xG Mecz"] = [f"{r['xG_For']:.2f} : {r['xG_Against']:.2f}" for _, r in df_found.iterrows()]
+                df_found["Strzały (Box)"] = [f"{int(r['Shots'])}({int(r['Box_Shots'])}) : {int(r['Shots_Against'])}({int(r['Box_Shots_Against'])})" for _, r in df_found.iterrows()]
+                df_found["Posiadanie"] = [f"{r['Possession']:.1f}%" for _, r in df_found.iterrows()]
+                
+                table_show = df_found[["Team", "Venue", "Opponent", "Wynik", "xG Mecz", "Strzały (Box)", "Posiadanie"]]
+                table_show.columns = ["Drużyna", "Gdzie", "Rywal", "Wynik", "xG (Własne : Rywal)", "Strzały (w polu)", "Posiadanie"]
+                
+                st.dataframe(table_show, use_container_width=True, hide_index=True)
+
+                # Podsumowanie: kto najczęściej wygrywa w tych okolicznościach
+                if not selected_team_filter:
+                    st.markdown("##### 🏆 Kto najczęściej notuje takie mecze?")
+                    top_counter = base_matches["Team"].value_counts().reset_index()
+                    top_counter.columns = ["Drużyna", "Liczba takich meczów"]
+                    st.dataframe(top_counter, use_container_width=True, hide_index=True)
+            else:
+                st.warning("Nie znaleziono w bazie spotkań spełniających tę kombinację kryteriów.")
 
 
 # =========================================================================
