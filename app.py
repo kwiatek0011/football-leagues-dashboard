@@ -4479,9 +4479,10 @@ with tab_asystent_ai:
                 base_matches = base_matches[base_matches["Venue"] == selected_venue_filter]
 
             # 1. Wynik (Wygrana / Remis / Porażka)
-            is_win = any(w in q_norm for w in ["wygran", "zwycies", "wygral"]) or cr_result == "Tylko Wygrane (3 pkt)"
-            is_loss = any(w in q_norm for w in ["przegran", "poraz"]) or cr_result == "Tylko Porażki (0 pkt)"
-            is_draw = any(w in q_norm for w in ["remis"]) or cr_result == "Tylko Remisy (1 pkt)"
+            # 1. Wynik (Wygrana / Remis / Porażka) - odporny na literówki
+            is_win = any(w in q_norm for w in ["wygr", "zwyc", "win", "won", "3 pkt"]) or cr_result == "Tylko Wygrane (3 pkt)"
+            is_loss = any(w in q_norm for w in ["przegr", "poraz", "loss", "lost", "0 pkt"]) or cr_result == "Tylko Porażki (0 pkt)"
+            is_draw = any(w in q_norm for w in ["remis", "draw", "1 pkt"]) or cr_result == "Tylko Remisy (1 pkt)"
 
             if is_win:
                 base_matches = base_matches[base_matches["Points"] == 3]
