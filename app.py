@@ -4409,7 +4409,87 @@ with tab_asystent_ai:
             st.subheader("❌ Niewykorzystane Okazje: Zmarnowane Wielkie Szanse & Underperformance")
             df_s = team_stats.sort_values(by="Big_Chances_Missed", ascending=not is_bottom)[["Team", "Mecze", "Big_Chances_Missed", "Big_Chances", "Gole_minus_xG"]].reset_index(drop=True)
             top_r = df_s.iloc[0]
-            st.error(f
+            st.error(f"🤖 **Wnioski AI:** Najwięcej 'setek' marnuje **{top_r['Team']}** – średnio aż **{top_r['Big_Chances_Missed']:.2f}** zmarnowanych wielkich szans na mecz!")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # INTENCJA 7: Overperformance / Snajperzy ponad stan
+        elif any(w in q_norm for w in ["overperformance", "ponad stan", "skuteczn", "wykonczen", "finisz", "snajper"]):
+            st.subheader("🎯 Zabójcza Skuteczność: Gole Zdobyte ponad wskaźnik xG")
+            df_s = team_stats.sort_values(by="Gole_minus_xG", ascending=is_bottom)[["Team", "Mecze", "Gole_Strzelone", "xG_Suma", "Gole_minus_xG"]].reset_index(drop=True)
+            top_r = df_s.iloc[0]
+            st.success(f"🤖 **Wnioski AI:** Największy overperformance notuje **{top_r['Team']}**, strzelając aż o **{top_r['Gole_minus_xG']:+.2f}** gola więcej, niż wynosiło ich łączne xG!")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # INTENCJA 8: Czyste konta (Clean Sheets)
+        elif any(w in q_norm for w in ["czyst", "kont", "clean sheet", "zero z tylu"]):
+            st.subheader("🛡️ Czyste Konta: Mecze bez straty bramki")
+            df_s = team_stats.sort_values(by="Clean_Sheets", ascending=is_bottom)[["Team", "Mecze", "Clean_Sheets", "Clean_Sheets_Pct", "Gole_Stracone"]].reset_index(drop=True)
+            top_r = df_s.iloc[0]
+            st.success(f"🤖 **Wnioski AI:** Najwięcej czystych kont zachował zespół **{top_r['Team']}** ({int(top_r['Clean_Sheets'])} meczów bez straty gola, czyli w **{top_r['Clean_Sheets_Pct']:.1f}%** spotkań).")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # INTENCJA 9: Posiadanie piłki
+        elif any(w in q_norm for w in ["posiadani", "utrzymuj", "kontrola pilk", "possession"]):
+            st.subheader("⚽ Kontrola Meczu: Średnie Posiadanie Piłki (%)")
+            df_s = team_stats.sort_values(by="Posiadanie", ascending=is_bottom)[["Team", "Mecze", "Posiadanie", "Podania_ogolem"]].reset_index(drop=True)
+            top_r = df_s.iloc[0]
+            st.success(f"🤖 **Wnioski AI:** {'Najdłużej przy piłce utrzymuje się' if not is_bottom else 'Najniższe posiadanie piłki ma'} **{top_r['Team']}** (średnio **{top_r['Posiadanie']:.1f}%** posiadania).")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # INTENCJA 10: Długie piłki / styl bezpośredni
+        elif any(w in q_norm for w in ["dlug", "laga", "bezposredn", "long ball", "direct"]):
+            st.subheader("🔭 Styl Gry: Celne Długie Podania (Long Balls)")
+            df_s = team_stats.sort_values(by="Long_Balls_Mean", ascending=is_bottom)[["Team", "Mecze", "Long_Balls_Mean", "Udzial_dlugich_pilek_proc", "Posiadanie"]].reset_index(drop=True)
+            top_r = df_s.iloc[0]
+            st.success(f"🤖 **Wnioski AI:** Najbardziej bezpośredni futbol preferuje **{top_r['Team']}** (średnio **{top_r['Long_Balls_Mean']:.1f}** długich piłek na mecz).")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # INTENCJA 11: Bramkarz / Obrony / Uratowane gole
+        elif any(w in q_norm for w in ["bramkarz", "keeper", "obron", "interwencj", "saves", "prevented"]):
+            st.subheader("🧤 Postawa Bramkarza: Uratowane Bramki (Goals Prevented)")
+            df_s = team_stats.sort_values(by="Goals_Prevented_Suma", ascending=is_bottom)[["Team", "Mecze", "Keeper_Saves_Mean", "Goals_Prevented_Suma", "Goals_Prevented_Mecz"]].reset_index(drop=True)
+            top_r = df_s.iloc[0]
+            st.success(f"🤖 **Wnioski AI:** Najwięcej goli ponad stan wybronił bramkarz drużyny **{top_r['Team']}** (uratował zespół przed utratą **{top_r['Goals_Prevented_Suma']:+.2f}** gola).")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # INTENCJA 12: Faule / Kartki / Agresja
+        elif any(w in q_norm for w in ["faul", "kartk", "czerwon", "zolt", "agresywn", "brutaln", "foul", "cards"]):
+            st.subheader("🟡 Dyscyplina: Faule i Żółte Kartki")
+            df_s = team_stats.sort_values(by="Fouls_Mean", ascending=is_bottom)[["Team", "Mecze", "Fouls_Mean", "Yellow_Cards_Mean", "Red_Cards_Sum"]].reset_index(drop=True)
+            top_r = df_s.iloc[0]
+            st.warning(f"🤖 **Wnioski AI:** Najbardziej agresywnie gra **{top_r['Team']}** – popełnia średnio **{top_r['Fouls_Mean']:.1f}** fauli oraz łapie **{top_r['Yellow_Cards_Mean']:.1f}** kartek na mecz.")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # INTENCJA 13: Kreacja xG / Najlepszy atak
+        elif any(w in q_norm for w in ["tworzy xg", "kreuj", "zagrozen", "najlepszy atak", "najgrozniejsz", "bramkostrzel"]):
+            st.subheader("⚽ Siła Ognia: Jakość Kreacji xG (Expected Goals)")
+            df_s = team_stats.sort_values(by="xG_na_mecz", ascending=is_bottom)[["Team", "Mecze", "xG_na_mecz", "Gole_na_mecz", "Strzaly_na_mecz"]].reset_index(drop=True)
+            top_r = df_s.iloc[0]
+            st.success(f"🤖 **Wnioski AI:** Najgroźniejszą ofensywą dysponuje **{top_r['Team']}**, generując średnio **{top_r['xG_na_mecz']:.2f} xG** na mecz.")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # INTENCJA 14: Obrona / Dopuszczone xGA
+        elif any(w in q_norm for w in ["obron", "defensyw", "xga", "traci bram"]):
+            st.subheader("🛡️ Szczelność Defensywy: Dopuszczona Jakość Szans (xGA)")
+            df_s = team_stats.sort_values(by="xGA_na_mecz", ascending=not is_bottom)[["Team", "Mecze", "xGA_na_mecz", "Gole_stracone_na_mecz", "Clean_Sheets"]].reset_index(drop=True)
+            top_r = df_s.iloc[0]
+            st.success(f"🤖 **Wnioski AI:** Najszczelniejszą defensywę ma **{top_r['Team']}**, dopuszczając zaledwie **{top_r['xGA_na_mecz']:.2f} xGA** na mecz.")
+            st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+        # BRAK DOPASOWANIA (Fallback)
+        else:
+            st.info(
+                f"🤔 **AI Scout:** Nie rozpoznałem dokładnie zapytania: *„{user_query}”*.\n\n"
+                "**Spróbuj zadać pytanie o:**\n"
+                "- Strzały z pola karnego (np. *kto oddaje najwięcej strzałów z pola karnego*)\n"
+                "- Grę u siebie vs na wyjeździe (np. *kto u siebie tworzy większe xG niż na wyjeździe*)\n"
+                "- Strzały z dystansu (np. *kto najczęściej uderza zza pola karnego*)\n"
+                "- Stałe fragmenty gry (np. *kto ma najlepsze SFG*)\n"
+                "- Skuteczność wykończenia (np. *overperformance, kto marnuje setki*)\n"
+                "- Posiadanie piłki i styl gry (np. *kto gra najwięcej długich piłek*)\n"
+                "- Bramkarzy (np. *kto ma najlepszego bramkarza*)\n"
+                "- Dyscyplinę (np. *kto najczęściej fauluje*)"
+            )
 
 
 # =========================================================================
