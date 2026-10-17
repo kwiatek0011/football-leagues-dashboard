@@ -1230,7 +1230,7 @@ display_df[float_cols] = display_df[float_cols].round(2)
 display_df.columns = [col.replace("_", " ") for col in display_df.columns]
 
 # Zakładki
-tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h, tab_analiza_ligowa, tab_zaleznosci = st.tabs([
+tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h, tab_analiza_ligowa, tab_asystent_ai, tab_zaleznosci = st.tabs([
     t("tab_general"),
     t("tab_offense"), 
     t("tab_defense"),
@@ -1238,6 +1238,7 @@ tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h, tab_
     t("tab_teams"),
     t("tab_h2h"),
     " Analiza Ligowa AI" if selected_lang == "PL" else " League AI Scout",
+    " Asystent AI (Zapytania)" if selected_lang == "PL" else " AI Scout Copilot",
     t("tab_insights"),
     
 ]) 
@@ -4273,6 +4274,179 @@ with tab_analiza_ligowa:
         st.info(f" **Górna Połowa Tabeli:**\n\n" + ", ".join(tier_srednia))
     with c_t3:
         st.error(f" **Strefa Problemowa (Dolne 25%):**\n\n" + ", ".join(tier_zagrozenie))
+
+# =========================================================================
+# NOWA ZAKŁADKA: ASYSTENT AI / WYSZUKIWARKA TAKTYCZNA (AI SCOUT COPILOT)
+# =========================================================================
+with tab_asystent_ai:
+    st.header(" Inteligentny Asystent Analityczny (AI Scout Copilot)" if selected_lang == "PL" else " Intelligent Tactical Scout Copilot")
+    st.caption(
+        "Zadaj pytanie w języku naturalnym dotyczące aktualnie wybranej ligi. Silnik analityczny AI przeszuka bazę meczową i wygeneruje dedykowany raport."
+        if selected_lang == "PL" else
+        "Ask questions in natural language about the current league. The AI analytics engine parses your query, runs calculations, and generates answers."
+    )
+
+    # 1. Sugestie szybkich pytań (Quick Prompts)
+    st.markdown("##### 💡 Przykładowe zapytania (kliknij, aby zapytać):" if selected_lang == "PL" else "##### 💡 Sample queries (click to run):")
+    
+    col_q1, col_q2, col_q3 = st.columns(3)
+    quick_query = None
+    
+    with col_q1:
+        if st.button("🏠 Kto tworzy większe xG u siebie niż na wyjeździe?" if selected_lang == "PL" else "🏠 Higher xG at home than away?", use_container_width=True):
+            quick_query = "dom wyjazd xg"
+        if st.button("🎯 Kto strzela ponad stan (Gole - xG)?" if selected_lang == "PL" else "🎯 Highest finishing overperformance?", use_container_width=True):
+            quick_query = "overperformance"
+            
+    with col_q2:
+        if st.button("🚀 Kto jest najgroźniejszy po stałych fragmentach?" if selected_lang == "PL" else "🚀 Best set-piece attack teams?", use_container_width=True):
+            quick_query = "stale fragmenty"
+        if st.button("🛡️ Kto dopuszcza najmniej strzałów z szesnastki?" if selected_lang == "PL" else "🛡️ Best box defense (fewest shots against)?", use_container_width=True):
+            quick_query = "obrona pola karnego"
+            
+    with col_q3:
+        if st.button("🔭 Kto gra najbardziej bezpośrednio (długie piłki)?" if selected_lang == "PL" else "🔭 Most direct teams (long balls)?", use_container_width=True):
+            quick_query = "dlugie pilki"
+        if st.button("🧤 Kto ma najlepszego bramkarza (uratowane gole)?" if selected_lang == "PL" else "🧤 Best goalkeeping (goals prevented)?", use_container_width=True):
+            quick_query = "bramkarz uratowane"
+
+    # 2. Pasek wyszukiwarki tekstowej
+    user_query = st.text_input(
+        "🔎 Wpisz swoje zapytanie do AI:" if selected_lang == "PL" else "🔎 Enter your query for the AI Scout:",
+        value=quick_query if quick_query else "",
+        placeholder="np. podaj mi drużyny które u siebie tworzą większe xG niż na wyjeździe..." if selected_lang == "PL" else "e.g. show teams with higher xG at home than away...",
+        key="txt_ai_scout_query"
+    )
+
+    # 3. Silnik rozpoznawania intencji (NLP Intent Engine)
+    if user_query:
+        q_clean = user_query.strip().lower()
+        st.markdown("---")
+        
+        # INTENCJA 1: Dom vs Wyjazd (xG Home vs Away) - dokładne zapytanie użytkownika!
+        if any(w in q_clean for w in ["dom", "wyjazd", "siebie", "home", "away", "gospodarz"]):
+            st.subheader("🏠 Analiza Przewagi Własnego Boiska (xG Dom vs Wyjazd)" if selected_lang == "PL" else "🏠 Home vs Away Dominance Analysis")
+            
+            # Agregacja dom vs wyjazd
+            venue_grp = matches_df.groupby(["Team", "Venue"]).agg(
+                xG_mean=("xG_For", "mean"),
+                xGA_mean=("xG_Against", "mean")
+            ).unstack()
+            
+            v_df = pd.DataFrame({
+                "Team": venue_grp.index,
+                "xG_Dom": venue_grp[("xG_mean", "Home")].round(2),
+                "xG_Wyjazd": venue_grp[("xG_mean", "Away")].round(2),
+            }).reset_index(drop=True)
+            
+            v_df["Różnica (Dom - Wyjazd)"] = (v_df["xG_Dom"] - v_df["xG_Wyjazd"]).round(2)
+            v_df = v_df.sort_values(by="Różnica (Dom - Wyjazd)", ascending=False).reset_index(drop=True)
+            
+            # Filtrujemy drużyny z dodatnią deltą
+            home_dominant = v_df[v_df["Różnica (Dom - Wyjazd)"] > 0]
+            away_dominant = v_df[v_df["Różnica (Dom - Wyjazd)"] < 0]
+            
+            top_home_team = home_dominant.iloc[0]["Team"] if len(home_dominant) > 0 else "Brak"
+            top_diff = home_dominant.iloc[0]["Różnica (Dom - Wyjazd)"] if len(home_dominant) > 0 else 0.0
+
+            # Raport tekstowy AI
+            if selected_lang == "PL":
+                st.success(
+                    f"🤖 **Wnioski AI:** W aktualnej lidze znaleziono **{len(home_dominant)} drużyn**, które przed własną publicznością kreują wyższą jakość szans (xG) niż w meczach wyjazdowych. "
+                    f"Największym 'gospodarzem twierdzy' jest **{top_home_team}**, która u siebie notuje średnio o **+{top_diff:.2f} xG / mecz** więcej niż w delegacjach!"
+                )
+            else:
+                st.success(
+                    f"🤖 **AI Insights:** Found **{len(home_dominant)} teams** creating higher xG at home than on the road. "
+                    f"The biggest home fortress belongs to **{top_home_team}** with **+{top_diff:.2f} xG / match** differential at home!"
+                )
+
+            # Tabela i wykres
+            col_t, col_c = st.columns([1.1, 1.3])
+            with col_t:
+                st.dataframe(
+                    v_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Różnica (Dom - Wyjazd)": st.column_config.NumberColumn(format="%+.2f")
+                    }
+                )
+            with col_c:
+                fig_h = go.Figure(go.Bar(
+                    x=v_df["Różnica (Dom - Wyjazd)"],
+                    y=v_df["Team"],
+                    orientation='h',
+                    marker_color=["#10B981" if v > 0 else "#EF4444" for v in v_df["Różnica (Dom - Wyjazd)"]],
+                    text=[f"{v:+.2f}" for v in v_df["Różnica (Dom - Wyjazd)"]],
+                    textposition="outside"
+                ))
+                fig_h.update_layout(
+                    height=480, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22",
+                    yaxis=dict(autorange="reversed"), xaxis=dict(title="Delta xG (Dom - Wyjazd)")
+                )
+                st.plotly_chart(fig_h, use_container_width=True)
+
+        # INTENCJA 2: Overperformance strzelecki (Gole - xG)
+        elif any(w in q_clean for w in ["overperformance", "ponad stan", "skuteczno", "finisz", "wykończenie"]):
+            st.subheader("🎯 Snajperzy ponad stan: Skuteczność wykończenia (Gole - xG)")
+            df_eff = team_stats.sort_values(by="Gole_minus_xG", ascending=False)[["Team", "Mecze", "Gole_Strzelone", "xG_Suma", "Gole_minus_xG"]].reset_index(drop=True)
+            top_eff = df_eff.iloc[0]
+            
+            st.success(f"🤖 **Raport AI:** Liderem skuteczności jest **{top_eff['Team']}**, zdobywając o **{top_eff['Gole_minus_xG']:+.2f} gola** więcej niż wynikało z łącznego wskaźnika Expected Goals ({top_eff['Gole_Strzelone']} goli z {top_eff['xG_Suma']:.2f} xG).")
+            st.dataframe(df_eff, use_container_width=True, hide_index=True)
+
+        # INTENCJA 3: Stałe fragmenty gry (SFG)
+        elif any(w in q_clean for w in ["stale", "fragment", "sfg", "rożne", "corner", "set play"]):
+            st.subheader("🚀 Groźność po Stałych Fragmentach Gry (Set Play xG)")
+            df_sp = team_stats.sort_values(by="xG_SP_na_mecz", ascending=False)[["Team", "Mecze", "xG_SP_na_mecz", "xGA_SP_na_mecz"]].reset_index(drop=True)
+            top_sp = df_sp.iloc[0]
+            
+            st.success(f"🤖 **Raport AI:** Najlepiej stałe fragmenty gry wykonuje **{top_sp['Team']}**, generując z nich średnio aż **{top_sp['xG_SP_na_mecz']:.2f} xG na mecz**.")
+            st.dataframe(df_sp, use_container_width=True, hide_index=True)
+
+        # INTENCJA 4: Obrona szesnastki
+        elif any(w in q_clean for w in ["pole karne", "szesnast", "box", "blok"]):
+            st.subheader("🛡️ Szczelność Pola Karnego: Strzały dopuszczone z szesnastki")
+            df_box = team_stats.sort_values(by="Box_Shots_Against_Mean", ascending=True)[["Team", "Mecze", "Box_Shots_Against_Mean", "Box_Touches_Against_Mean"]].reset_index(drop=True)
+            top_box = df_box.iloc[0]
+            
+            st.success(f"🤖 **Raport AI:** Najszczelniejszą strefę szesnastki ma **{top_box['Team']}**, dopuszczając zaledwie **{top_box['Box_Shots_Against_Mean']:.1f} strzału z pola karnego** na mecz.")
+            st.dataframe(df_box, use_container_width=True, hide_index=True)
+
+        # INTENCJA 5: Styl bezpośredni / Długie piłki
+        elif any(w in q_clean for w in ["długie", "dlugie", "long", "bezpośredn", "direct"]):
+            st.subheader("🔭 Styl Gry: Zespoły najczęściej zagrywające długie piłki")
+            df_long = team_stats.sort_values(by="Long_Balls_Mean", ascending=False)[["Team", "Mecze", "Long_Balls_Mean", "Udzial_dlugich_pilek_proc", "Posiadanie"]].reset_index(drop=True)
+            top_long = df_long.iloc[0]
+            
+            st.success(f"🤖 **Raport AI:** Najbardziej bezpośredni futbol preferuje **{top_long['Team']}**, posyłając średnio **{top_long['Long_Balls_Mean']:.1f} celnych długich podań** (stanowią one {top_long['Udzial_dlugich_pilek_proc']:.1f}% ich rozegrania przy {top_long['Posiadanie']:.1f}% posiadania).")
+            st.dataframe(df_long, use_container_width=True, hide_index=True)
+
+        # INTENCJA 6: Praca bramkarza (Goals Prevented)
+        elif any(w in q_clean for w in ["bramkarz", "keeper", "obron", "saves", "prevented"]):
+            st.subheader("🧤 Wpływ Bramkarza na Wynik: Gole Uratowane Ponad Stan (Goals Prevented)")
+            df_gk = team_stats.sort_values(by="Goals_Prevented_Suma", ascending=False)[["Team", "Mecze", "Keeper_Saves_Mean", "Goals_Prevented_Suma", "Goals_Prevented_Mecz"]].reset_index(drop=True)
+            top_gk = df_gk.iloc[0]
+            
+            st.success(f"🤖 **Raport AI:** Najwięcej punktów swojej drużynie 'ratuje' bramkarz zespołu **{top_gk['Team']}** (uchronił zespół przed utratą **{top_gk['Goals_Prevented_Suma']:+.2f} gola** w sezonie).")
+            st.dataframe(df_gk, use_container_width=True, hide_index=True)
+
+        # BRAK DOPASOWANIA (Fallback)
+        else:
+            st.info(
+                f"🤔 **AI Scout:** Nie do końca rozpoznałem zapytanie: *„{user_query}”*.\n\n"
+                "**Baza zapytań obsługuje m.in. tematy:**\n"
+                "- Przewaga domowa (np. *kto u siebie tworzy większe xG niż na wyjeździe*)\n"
+                "- Skuteczność napastników (np. *overperformance, kto strzela ponad xG*)\n"
+                "- Stałe fragmenty gry (np. *kto jest najgroźniejszy po SFG*)\n"
+                "- Obrona pola karnego (np. *kto dopuszcza najmniej strzałów z szesnastki*)\n"
+                "- Długie piłki i styl bezpośredni (np. *kto gra najwięcej długich podań*)\n"
+                "- Klasa bramkarzy (np. *kto ma najwięcej uratowanych goli*)\n\n"
+                "👉 *Możesz też po prostu kliknąć jeden z gotowych kafelków u góry strony!*"
+            )
+
+
 
 # =========================================================================
 # TAB 6: PRACOWNIA ZALEŻNOŚCI (PL / EN)
