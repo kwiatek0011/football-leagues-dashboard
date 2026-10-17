@@ -4439,7 +4439,7 @@ with tab_asystent_ai:
         # TRYB A: BADANIE SERII MECZOWYCH (STREAKS)
         if detect_streak:
             venue_label = "U Siebie (Dom)" if selected_venue_filter == "Home" else ("Na Wyjeździe" if selected_venue_filter == "Away" else "Ogólne (Dom + Wyjazd)")
-            st.subheader(f"🔥 Serie Zwycięstw: {venue_label} (Długość: min. {streak_target_len} meczów)")
+            st.subheader(f" Serie Zwycięstw: {venue_label} (Długość: min. {streak_target_len} meczów)")
 
             streak_records = []
             pool_teams = [selected_team_filter] if selected_team_filter else team_stats["Team"].unique()
@@ -4461,7 +4461,7 @@ with tab_asystent_ai:
                     streak_records.append({"Team": tm, "Length": len(current_streak), "Matches": list(current_streak)})
 
             if streak_records:
-                st.success(f"🤖 **Znaleziono {len(streak_records)} serii** spełniających kryteria (długość $\ge {streak_target_len}$ meczów z rzędu).")
+                st.success(f" **Znaleziono {len(streak_records)} serii** spełniających kryteria (długość $\ge {streak_target_len}$ meczów z rzędu).")
                 for s_idx, st_data in enumerate(streak_records, 1):
                     team_name = st_data["Team"]
                     s_len = st_data["Length"]
@@ -4606,11 +4606,11 @@ with tab_asystent_ai:
             header_team = selected_team_filter if selected_team_filter else "Wszystkie Drużyny (Skala Ligi)"
             venue_txt = "Dom" if selected_venue_filter == "Home" else ("Wyjazd" if selected_venue_filter == "Away" else "Dom + Wyjazd")
 
-            st.subheader(f"📋 Wyniki Wyszukiwania: {header_team}")
+            st.subheader(f" Wyniki Wyszukiwania: {header_team}")
             st.caption(f"Kryterium: **{metric_label} ({comp_word})** | Miejsce: **{venue_txt}**")
 
             if len(base_matches) > 0:
-                st.success(f"🤖 **Znaleziono {len(base_matches)} spotkań** spełniających zadane kryteria!")
+                st.success(f" **Znaleziono {len(base_matches)} spotkań** spełniających zadane kryteria!")
 
                 table_rows = []
                 for _, r in base_matches.iterrows():
@@ -4637,7 +4637,7 @@ with tab_asystent_ai:
                 st.dataframe(df_clean_result, use_container_width=True, hide_index=True)
 
                 if not selected_team_filter:
-                    st.markdown("##### 🏆 Kto najczęściej notuje takie mecze?")
+                    st.markdown("#####  Kto najczęściej notuje takie mecze?")
                     top_counter = base_matches["Team"].value_counts().reset_index()
                     top_counter.columns = ["Drużyna", "Liczba takich spotkań"]
                     st.dataframe(top_counter, use_container_width=True, hide_index=True)
@@ -4649,7 +4649,7 @@ with tab_asystent_ai:
 # TAB 6: PRACOWNIA ZALEŻNOŚCI (PL / EN)
 # =========================================================================
 with tab_zaleznosci:
-    st.header("🔬 Correlation Lab: X vs Y Metrics" if selected_lang == "EN" else "🔬 Zależności: Wybierz osie X i Y")
+    st.header(" Correlation Lab: X vs Y Metrics" if selected_lang == "EN" else " Zależności: Wybierz osie X i Y")
     st.caption("Investigate relationships and Pearson correlation coefficients across the league." if selected_lang == "EN" else "Wybierz metryki z bazy, aby sprawdzić ich relację oraz siłę korelacji w lidze.")
 
     if selected_lang == "EN":
