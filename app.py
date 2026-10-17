@@ -4280,7 +4280,7 @@ with tab_analiza_ligowa:
 # ZAKŁADKA: ASYSTENT AI & ZAAWANSOWANA WYSZUKIWARKA MECZOWA
 # =========================================================================
 with tab_asystent_ai:
-    st.header("🤖 Inteligentny Asystent Analityczny & Wyszukiwarka Meczowa" if selected_lang == "PL" else "🤖 AI Tactical Scout & Advanced Match Query Engine")
+    st.header(" Inteligentny Asystent Analityczny & Wyszukiwarka Meczowa" if selected_lang == "PL" else " AI Tactical Scout & Advanced Match Query Engine")
     st.caption(
         "Zadaj dowolne pytanie w języku naturalnym lub skorzystaj z filtrów: badaj serie zwycięstw dom/wyjazd, mecze wygrane pomimo gorszych statystyk (xG, strzały z szesnastki) oraz anomalie."
         if selected_lang == "PL" else
@@ -4296,22 +4296,22 @@ with tab_asystent_ai:
         st.session_state["ai_scout_user_query"] = prompt_text
 
     # 1. Szybkie kafelki z przykładami zapytań
-    st.markdown("##### 💡 Przykłady zapytań do przetestowania (kliknij, aby uruchomić):")
+    st.markdown("#####  Przykłady zapytań do przetestowania (kliknij, aby uruchomić):")
     col_q1, col_q2, col_q3 = st.columns(3)
     with col_q1:
-        if st.button("🏆 Serie zwycięstw u siebie (min. 3 mecze)", on_click=set_prompt, args=("serie zwycięstw u siebie 3 meczowe",), use_container_width=True):
+        if st.button(" Serie zwycięstw u siebie (min. 3 mecze)", on_click=set_prompt, args=("serie zwycięstw u siebie 3 meczowe",), use_container_width=True):
             pass
-        if st.button("🚌 Serie zwycięstw na wyjeździe (min. 2 mecze)", on_click=set_prompt, args=("serie zwycięstw na wyjeździe 2 meczowe",), use_container_width=True):
+        if st.button(" Serie zwycięstw na wyjeździe (min. 2 mecze)", on_click=set_prompt, args=("serie zwycięstw na wyjeździe 2 meczowe",), use_container_width=True):
             pass
     with col_q2:
-        if st.button("🎯 Wygrane pomimo niższego xG (Smash & Grab)", on_click=set_prompt, args=("mecze wygrane pomimo niższego xg",), use_container_width=True):
+        if st.button(" Wygrane pomimo niższego xG (Smash & Grab)", on_click=set_prompt, args=("mecze wygrane pomimo niższego xg",), use_container_width=True):
             pass
-        if st.button("🥊 Wygrane pomimo mniejszej liczby strzałów w polu", on_click=set_prompt, args=("mecze wygrane pomimo mniejszej ilości strzałów z pola karnego",), use_container_width=True):
+        if st.button(" Wygrane pomimo mniejszej liczby strzałów w polu", on_click=set_prompt, args=("mecze wygrane pomimo mniejszej ilości strzałów z pola karnego",), use_container_width=True):
             pass
     with col_q3:
-        if st.button("⚽ Wyjazdy z min. 1 strzelonym golem", on_click=set_prompt, args=("mecze na wyjeździe z min jednym strzelonym golem",), use_container_width=True):
+        if st.button(" Wyjazdy z min. 1 strzelonym golem", on_click=set_prompt, args=("mecze na wyjeździe z min jednym strzelonym golem",), use_container_width=True):
             pass
-        if st.button("⚔️ Wygrane mecze mając więcej wygranych pojedynków", on_click=set_prompt, args=("mecze wygrane mając więcej wygranych pojedynków",), use_container_width=True):
+        if st.button(" Wygrane mecze mając więcej wygranych pojedynków", on_click=set_prompt, args=("mecze wygrane mając więcej wygranych pojedynków",), use_container_width=True):
             pass
 
     # 2. Formularz wyszukiwarki: brak parametru `value=` eliminuje cofanie wpisanego tekstu!
@@ -4319,19 +4319,19 @@ with tab_asystent_ai:
         c_input, c_btn = st.columns([4.2, 0.8])
         with c_input:
             st.text_input(
-                "🔎 Wpisz swoje zapytanie:",
+                " Wpisz swoje zapytanie:",
                 key="ai_scout_user_query",
                 placeholder="np. mecze Chelsea wygrane pomimo niższego xG, mecze Evertonu z większą liczbą podań...",
                 label_visibility="collapsed"
             )
         with c_btn:
-            st.form_submit_button("🔍 Szukaj" if selected_lang == "PL" else "🔍 Search", use_container_width=True)
+            st.form_submit_button(" Szukaj" if selected_lang == "PL" else " Search", use_container_width=True)
 
     # Pobieramy bieżącą treść zapytania bezpośrednio ze stanu sesji
     user_query = st.session_state.get("ai_scout_user_query", "").strip()
 
     # 3. Rozwijany kreator filtrów (opcjonalny)
-    with st.expander("🛠️ Kliknij tutaj, jeśli wolisz precyzyjnie wyklikać filtry zamiast pisać"):
+    with st.expander(" Kliknij tutaj, jeśli wolisz precyzyjnie wyklikać filtry zamiast pisać"):
         col_f1, col_f2, col_f3, col_f4 = st.columns(4)
         with col_f1:
             team_choices = ["Wszystkie (Liga)"] + sorted(team_stats["Team"].unique().tolist())
