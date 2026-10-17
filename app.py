@@ -4287,13 +4287,15 @@ with tab_asystent_ai:
         "Search match data in natural language or use tactical filters: analyze home/away winning streaks, paradox matches won against xG/shot metrics, and statistical anomalies."
     )
 
-    if "txt_ai_scout_query" not in st.session_state:
-        st.session_state["txt_ai_scout_query"] = ""
+    # Inicjalizacja klucza w sesji (jeśli jeszcze nie istnieje)
+    if "ai_scout_user_query" not in st.session_state:
+        st.session_state["ai_scout_user_query"] = ""
 
+    # Funkcja przypisująca pytanie z kafelków do pola tekstowego
     def set_prompt(prompt_text):
-        st.session_state["txt_ai_scout_query"] = prompt_text
+        st.session_state["ai_scout_user_query"] = prompt_text
 
-    # Szybkie kafelki z przykładami zapytań
+    # 1. Szybkie kafelki z przykładami zapytań
     st.markdown("##### 💡 Przykłady zapytań do przetestowania (kliknij, aby uruchomić):")
     col_q1, col_q2, col_q3 = st.columns(3)
     with col_q1:
@@ -4309,32 +4311,26 @@ with tab_asystent_ai:
     with col_q3:
         if st.button("⚽ Wyjazdy z min. 1 strzelonym golem", on_click=set_prompt, args=("mecze na wyjeździe z min jednym strzelonym golem",), use_container_width=True):
             pass
-        if st.button("📈 Mecze z anomalią podań vs średnia", on_click=set_prompt, args=("mecze gdzie ilość podań różniła się od średniej",), use_container_width=True):
+        if st.button("⚔️ Wygrane mecze mając więcej wygranych pojedynków", on_click=set_prompt, args=("mecze wygrane mając więcej wygranych pojedynków",), use_container_width=True):
             pass
 
-    # 2. Pasek wyszukiwarki w niezawodnym formularzu (st.form)
-    # 2. Pasek wyszukiwarki w niezawodnym formularzu (st.form)
+    # 2. Formularz wyszukiwarki: brak parametru `value=` eliminuje cofanie wpisanego tekstu!
     with st.form(key="ai_scout_form", clear_on_submit=False):
         c_input, c_btn = st.columns([4.2, 0.8])
         with c_input:
             st.text_input(
-                "Zapytanie:",
-                key="txt_ai_scout_query",
-                placeholder="np. mecze Chelsea wygrane pomimo niższego xG...",
+                "🔎 Wpisz swoje zapytanie:",
+                key="ai_scout_user_query",
+                placeholder="np. mecze Chelsea wygrane pomimo niższego xG, mecze Evertonu z większą liczbą podań...",
                 label_visibility="collapsed"
             )
         with c_btn:
-            submitted = st.form_submit_button("🔍 Szukaj", use_container_width=True)
+            st.form_submit_button("🔍 Szukaj" if selected_lang == "PL" else "🔍 Search", use_container_width=True)
 
-    user_query = st.session_state.get("txt_ai_scout_query", "").strip()
+    # Pobieramy bieżącą treść zapytania bezpośrednio ze stanu sesji
+    user_query = st.session_state.get("ai_scout_user_query", "").strip()
 
-    # Aktualizacja stanu po zatwierdzeniu formularza
-    if submitted or user_query:
-        st.session_state["txt_ai_scout_query"] = user_query
-
-    
-
-    # Rozwijany kreator filtrów (alternatywa do wpisywania)
+    # 3. Rozwijany kreator filtrów (opcjonalny)
     with st.expander("🛠️ Kliknij tutaj, jeśli wolisz precyzyjnie wyklikać filtry zamiast pisać"):
         col_f1, col_f2, col_f3, col_f4 = st.columns(4)
         with col_f1:
@@ -4344,7 +4340,6 @@ with tab_asystent_ai:
         with col_f2:
             cr_result = st.selectbox("Wynik meczu:", ["Dowolny", "Tylko Wygrane (3 pkt)", "Tylko Remisy (1 pkt)", "Tylko Porażki (0 pkt)"], index=0, key="cr_sb_res")
             cr_goals_cond = st.selectbox("Warunek bramkowy:", ["Dowolny", "Min. 1 strzelony gol", "Min. 1 stracony gol", "Czyste konto (0 straconych)", "Obie strzeliły (BTTS)"], index=0, key="cr_sb_goals")
-        # W kreatorze filtrów upewnij się, że opcje zawierają xGOT i npxG:
         with col_f3:
             cr_paradox = st.selectbox(
                 "Wygrana pomimo gorszych statystyk:",
@@ -4357,7 +4352,8 @@ with tab_asystent_ai:
                     "Niższe xG ze SFG niż rywal",
                     "Mniejsza liczba oddanych strzałów",
                     "Mniejsza liczba strzałów z szesnastki",
-                    "Niższe posiadanie piłki (< 50%)"
+                    "Niższe posiadanie piłki (< 50%)",
+                    "Mniej wygranych pojedynków"
                 ],
                 index=0, key="cr_sb_paradox"
             )
@@ -4378,12 +4374,15 @@ with tab_asystent_ai:
         rep = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
         for k, v in rep.items():
             txt = txt.replace(k, v)
+        # Korekta typowych literówek
+        txt = txt.replace("pomiimo", "pomimo").replace("wygrene", "wygrane")
+        txt = txt.replace("set-play", "set play").replace("open-play", "open play")
+        txt = txt.replace("xg-set play", "set play").replace("xg set-play", "set play")
         return txt
 
     q_norm = normalize_nlp(user_query) if user_query else ""
 
-    # Ustalanie parametrów wyszukiwania (albo z tekstu, albo z kreatora)
-    # 1. Drużyna
+    # Ustalanie parametrów wyszukiwania
     selected_team_filter = None
     if cr_team != "Wszystkie (Liga)":
         selected_team_filter = cr_team
@@ -4395,14 +4394,12 @@ with tab_asystent_ai:
                 selected_team_filter = t_candidate
                 break
 
-    # 2. Miejsce (Venue)
     selected_venue_filter = None
     if "u siebie" in cr_venue.lower() or any(w in q_norm for w in ["u siebie", "dom", "domu", "domowe", "gospodarz"]):
         selected_venue_filter = "Home"
     elif "wyjeździe" in cr_venue.lower() or any(w in q_norm for w in ["na wyjezdzie", "wyjazd", "wyjazdowe", "delegacj", "gosc"]):
         selected_venue_filter = "Away"
 
-    # 3. Czy zapytanie dotyczy serii (Streaks)?
     detect_streak = cr_is_streak or any(w in q_norm for w in ["seri", "streak", "z rzedu", "pod rzad", "kolejnych"])
     streak_target_len = cr_streak_len
     num_map = {
@@ -4419,7 +4416,6 @@ with tab_asystent_ai:
             streak_target_len = v_num
             break
 
-    # 4. Sprawdzanie czy uruchamiamy analizę
     has_active_query = bool(user_query or cr_team != "Wszystkie (Liga)" or cr_venue != "Wszystkie" or cr_result != "Dowolny" or cr_paradox != "Brak (Dowolne)" or cr_anomaly != "Brak" or cr_is_streak)
 
     if has_active_query:
@@ -4454,15 +4450,12 @@ with tab_asystent_ai:
                 for s_idx, st_data in enumerate(streak_records, 1):
                     team_name = st_data["Team"]
                     s_len = st_data["Length"]
-                    
                     st.markdown(
                         f"""<div style="background-color: #161B22; border-left: 4px solid #10B981; border-radius: 6px; padding: 10px 14px; margin-bottom: 6px;">
                             <span style="font-weight: 800; color: #10B981; font-size: 14px;">#{s_idx} {team_name} – Seria {s_len} Zwycięstw z rzędu ({venue_label})</span>
                         </div>""",
                         unsafe_allow_html=True
                     )
-                    
-                    # Wypisujemy mecze składające się na serię
                     match_chips = []
                     for m_s in st_data["Matches"]:
                         v_str = "D" if m_s["Venue"] == "Home" else "W"
@@ -4472,19 +4465,15 @@ with tab_asystent_ai:
             else:
                 st.warning(f"Brak serii zwycięstw o długości co najmniej {streak_target_len} meczów dla wybranego filtra ({venue_label}).")
 
-        # TRYB B: FILTROWANIE MECZÓW (PARADOKSY, ANOMALIE, BRAMKI)
+        # TRYB B: FILTROWANIE MECZÓW
         else:
-            # Standaryzacja myślników i odmian
-            q_norm = q_norm.replace("pomiimo", "pomimo").replace("set-play", "set play").replace("open-play", "open play").replace("xg-set play", "set play").replace("xg set-play", "set play")
-
             base_matches = matches_df.copy()
             if selected_team_filter:
                 base_matches = base_matches[base_matches["Team"] == selected_team_filter]
             if selected_venue_filter:
                 base_matches = base_matches[base_matches["Venue"] == selected_venue_filter]
 
-            # 1. Wynik (Wygrana / Remis / Porażka)
-            # 1. Wynik (Wygrana / Remis / Porażka) - odporny na literówki
+            # 1. Wynik (odporny na odmiany i literówki typu 'wygrene')
             is_win = any(w in q_norm for w in ["wygr", "zwyc", "win", "won", "3 pkt"]) or cr_result == "Tylko Wygrane (3 pkt)"
             is_loss = any(w in q_norm for w in ["przegr", "poraz", "loss", "lost", "0 pkt"]) or cr_result == "Tylko Porażki (0 pkt)"
             is_draw = any(w in q_norm for w in ["remis", "draw", "1 pkt"]) or cr_result == "Tylko Remisy (1 pkt)"
@@ -4496,7 +4485,7 @@ with tab_asystent_ai:
             elif is_draw:
                 base_matches = base_matches[base_matches["Points"] == 1]
 
-            # 2. Bramki strzelone / stracone
+            # 2. Bramki
             if "min jednym strzelonym" in q_norm or "ze strzelonym golem" in q_norm or cr_goals_cond == "Min. 1 strzelony gol":
                 base_matches = base_matches[base_matches["Goals_For"] >= 1]
             if "min jednym straconym" in q_norm or "ze straconym golem" in q_norm or cr_goals_cond == "Min. 1 stracony gol":
@@ -4506,11 +4495,10 @@ with tab_asystent_ai:
             if "btts" in q_norm or "obie strzelily" in q_norm or cr_goals_cond == "Obie strzeliły (BTTS)":
                 base_matches = base_matches[(base_matches["Goals_For"] >= 1) & (base_matches["Goals_Against"] >= 1)]
 
-            # 3. Kierunek porównania: "wyższe / więcej" (>) czy "niższe / mniej" (<)
+            # 3. Kierunek porównania
             is_higher = any(w in q_norm for w in ["wyzsz", "wieksz", "wiecej", "lepsz"])
             is_lower = any(w in q_norm for w in ["nizsz", "mniejsz", "mniej", "gorsz"])
 
-            # Domyślna relacja przy słowie "pomimo"
             if not is_higher and not is_lower:
                 op_greater = True if is_loss else False
             else:
@@ -4518,27 +4506,27 @@ with tab_asystent_ai:
 
             comp_word = "WIĘCEJ / WYŻSZE" if op_greater else "MNIEJ / NIŻSZE"
 
-            # 4. Wykrywanie SZUKANEJ METRYKI (dynamiczne dopasowanie kolumn do pytania)
+            # 4. Wykrywanie szukanej statystyki (dokładnie dopasowanej do zapytania)
             metric_label = "xG (Własne : Rywal)"
             col_for = "xG_For"
             col_opp = "xG_Against"
-            val_format = "float" # float / int / pct
+            val_format = "float"
 
-            # POJEDYNKI (Duels)
-            if any(w in q_norm for w in ["pojedyn", "starci", "duels"]):
+            # POJEDYNKI
+            if any(w in q_norm for w in ["pojedyn", "starci", "duels"]) or cr_paradox == "Mniej wygranych pojedynków":
                 metric_label = "Pojedynki Wygrane (Własne : Rywal)"
                 col_for = "Duels_Won"
                 col_opp = "Duels_Won_Against"
                 val_format = "int"
 
-            # xGOT (Post-shot xG)
+            # xGOT
             elif any(w in q_norm for w in ["xgot", "post-shot", "post shot", "on target"]) or cr_paradox == "Niższe xGOT niż rywal":
                 metric_label = "xGOT (Własne : Rywal)"
                 col_for = "xGOT_For"
                 col_opp = "xGOT_Against"
                 val_format = "float"
 
-            # xG Set Play (stałe fragmenty gry)
+            # xG Set Play (stałe fragmenty)
             elif any(w in q_norm for w in ["set play", "setplay", "sfg", "stalych fragment", "stale fragmenty", "ze stalych"]) or cr_paradox == "Niższe xG ze SFG niż rywal":
                 metric_label = "xG Set Play (Własne : Rywal)"
                 col_for = "xG_SP_For"
@@ -4552,7 +4540,7 @@ with tab_asystent_ai:
                 col_opp = "xG_OP_Against"
                 val_format = "float"
 
-            # npxG (bez rzutów karnych)
+            # npxG
             elif any(w in q_norm for w in ["npxg", "non-penalty", "non penalty", "bez karnych"]) or cr_paradox == "Niższe npxG (bez karnych)":
                 metric_label = "npxG (Własne : Rywal)"
                 col_for = "npxG_For"
@@ -4587,7 +4575,7 @@ with tab_asystent_ai:
                 col_opp = "Passes_Total_Against"
                 val_format = "int"
 
-            # 5. Filtrowanie meczów wg wykrytej metryki i relacji (> lub <)
+            # 5. Filtrowanie meczów wg wykrytego kryterium
             if col_opp:
                 if op_greater:
                     base_matches = base_matches[base_matches[col_for] > base_matches[col_opp]]
@@ -4614,7 +4602,6 @@ with tab_asystent_ai:
                     res_str = f"{int(r['Goals_For'])}:{int(r['Goals_Against'])}"
                     gdzie_str = "Dom" if r["Venue"] == "Home" else "Wyjazd"
 
-                    # Formatowanie szukanej statystyki
                     if val_format == "float":
                         stat_val_str = f"{r[col_for]:.2f} : {r[col_opp]:.2f}"
                     elif val_format == "int":
