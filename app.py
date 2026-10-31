@@ -4292,7 +4292,7 @@ with tab_analiza_ligowa:
 # ZAKŁADKA: SZCZEGÓŁOWA ANALIZA MECZU (MATCH ANALYSIS)
 # =========================================================================
 with tab_analiza_meczu:
-    st.header("🏟️ Szczegółowa Analiza Meczu & Próbki Formy" if selected_lang == "PL" else "🏟️ Match Deep-Dive & Form Sample Analysis")
+    st.header(" Szczegółowa Analiza Meczu & Próbki Formy" if selected_lang == "PL" else " Match Deep-Dive & Form Sample Analysis")
     st.caption(
         "Przeanalizuj pojedyncze spotkanie lub serię ostatnich meczów wybranego zespołu w zderzeniu z rywalem lub normą sezonową."
         if selected_lang == "PL" else
@@ -4403,7 +4403,7 @@ with tab_analiza_meczu:
     # MODUŁ 4: ALGORYTMICZNE PODSUMOWANIE POMECZOWE AI (EXECUTIVE BRIEF)
     # =====================================================================
     st.markdown("---")
-    st.subheader("🤖 Pomeczowa Diagnoza Taktyczna AI" if selected_lang == "PL" else "🤖 AI Match Executive Debrief")
+    st.subheader(" Pomeczowa Diagnoza Taktyczna AI" if selected_lang == "PL" else " AI Match Executive Debrief")
 
     # Wyliczanie kluczowych motorów i słabości w zderzeniu z normą sezonową
     brief_candidates = [
@@ -4448,10 +4448,10 @@ with tab_analiza_meczu:
         if deltas_positive:
             top_pos = deltas_positive[0]
             st.success(
-                f"🚀 **Główny Motor Napędowy:**\n\n"
+                f" **Główny Motor Napędowy:**\n\n"
                 f"**{top_pos[0]}**: wynik **{top_pos[1]:.2f}** (aż o **{top_pos[3]:+.0f}%** powyżej średniej sezonowej {top_pos[2]:.2f})."
                 if selected_lang == "PL" else
-                f"🚀 **Key Performance Driver:**\n\n"
+                f" **Key Performance Driver:**\n\n"
                 f"**{top_pos[0]}**: recorded **{top_pos[1]:.2f}** (**{top_pos[3]:+.0f}%** above seasonal baseline {top_pos[2]:.2f})."
             )
         else:
@@ -4460,10 +4460,10 @@ with tab_analiza_meczu:
         if deltas_negative:
             top_neg = deltas_negative[0]
             st.error(
-                f"⚠️ **Kluczowy Mankament:**\n\n"
+                f" **Kluczowy Mankament:**\n\n"
                 f"**{top_neg[0]}**: wynik **{top_neg[1]:.2f}** (spadek o **{top_neg[3]:+.0f}%** względem normy {top_neg[2]:.2f})."
                 if selected_lang == "PL" else
-                f"⚠️ **Primary Tactical Flaw:**\n\n"
+                f" **Primary Tactical Flaw:**\n\n"
                 f"**{top_neg[0]}**: recorded **{top_neg[1]:.2f}** (**{top_neg[3]:+.0f}%** below seasonal baseline {top_neg[2]:.2f})."
             )
         else:
@@ -4471,12 +4471,12 @@ with tab_analiza_meczu:
     with b3:
         if sample_prevented > 0:
             gk_msg = f"Bramkarz uratował **+{sample_prevented:.2f} gola** ponad stan (dopuszczone xGOT: {sample_xgot_against:.2f}, stracono: {int(sample_goals_conceded)})."
-            st.success(f"🧤 **Występ Bramkarza:**\n\n{gk_msg}")
+            st.success(f" **Występ Bramkarza:**\n\n{gk_msg}")
         elif sample_prevented < 0:
             gk_msg = f"Deficyt bramkarza: **{sample_prevented:.2f} gola** (rywal z celnych strzałów miał {sample_xgot_against:.2f} xGOT, a strzelił {int(sample_goals_conceded)} goli)."
-            st.warning(f"🧤 **Występ Bramkarza:**\n\n{gk_msg}")
+            st.warning(f" **Występ Bramkarza:**\n\n{gk_msg}")
         else:
-            st.info("🧤 **Bramkarz:** Czysty bilans interwencji zgodny z jakością strzałów rywala.")
+            st.info(" **Bramkarz:** Czysty bilans interwencji zgodny z jakością strzałów rywala.")
 
     # =====================================================================
     # MODUŁ 1: PEŁNE ZESTAWIENIE (PRZEŁĄCZNIK: SEZON vs RYWAL W MECZU)
@@ -4485,7 +4485,7 @@ with tab_analiza_meczu:
     
     col_t_title, col_t_mode = st.columns([1.6, 1.4])
     with col_t_title:
-        st.subheader("📋 Porównanie Szczegółowe" if selected_lang == "PL" else "📋 Detailed Match Comparison")
+        st.subheader(" Porównanie Szczegółowe" if selected_lang == "PL" else " Detailed Match Comparison")
     with col_t_mode:
         mode_opts = ["vs Norma Sezonowa", f"vs {opp_name} (W tym meczu)"] if selected_lang == "PL" else ["vs Seasonal Baseline", f"vs {opp_name} (This Fixture)"]
         comp_target_mode = st.radio("Tryb porównania:" if selected_lang == "PL" else "Comparison Mode:", mode_opts, horizontal=True, key="rb_match_comp_mode")
