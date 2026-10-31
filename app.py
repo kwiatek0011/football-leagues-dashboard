@@ -2777,30 +2777,29 @@ with tab_druzyny:
         fig_p.add_shape(type="path", path="M 88.5, 26.5 A 9.15,9.15 0 0,0 88.5, 41.5", line=dict(color=line_col, width=1.5))
 
         fig_p.update_layout(
-            height=340,  # Niższa wysokość idealnie dopasowana do dwóch kolumn
-            template="plotly_dark",
-            paper_bgcolor="#0E1117",
-            plot_bgcolor="#0E1117",
-            title=dict(
-                text=f"<b>{pitch_title}</b><br><span style='font-size: 11px; color: #94A3B8;'>Łącznie: <b>{tot_shots} strzałów</b> | Zagrożenie: <b>{xg_val:.2f} xG</b></span>",
-                x=0.03, y=0.96, font=dict(size=13, color="#FFFFFF")
-            ),
-            xaxis=dict(
-                visible=False, 
-                range=[-3, 108], 
-                fixedrange=True
-            ),
-            yaxis=dict(
-                visible=False, 
-                range=[-3, 71], 
-                scaleanchor="x",   # <--- TO JEST KLUCZ: blokuje proporcję 1:1 z osią X
-                scaleratio=1,      # <--- Gwarantuje idealnie okrągłe koło środkowe
-                fixedrange=True
-            ),
-            margin=dict(l=10, r=10, t=50, b=10),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10.5))
+        height=330,
+        template="plotly_dark",
+        plot_bgcolor="#0E1117",
+        paper_bgcolor="#0E1117",
+        xaxis=dict(visible=False, range=[-3, 108], fixedrange=True),
+        yaxis=dict(
+            visible=False,
+            range=[-3, 71],
+            scaleanchor="x",
+            scaleratio=1,
+            fixedrange=True
+        ),
+        margin=dict(l=10, r=10, t=30, b=10),
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(color="#FFFFFF", size=10.5)
         )
+    )
         return fig_p
 
     fig_pitch = draw_dark_pitch()
