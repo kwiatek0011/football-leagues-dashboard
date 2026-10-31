@@ -4996,28 +4996,66 @@ with tab_asystent_ai:
 
     # Ustalanie parametrów wyszukiwania
     # Ustalanie parametrów wyszukiwania (albo z tekstu, albo z kreatora)
-    # 1. Drużyna (inteligentne dopasowanie bez kolizji 'City', 'United', 'Real' itp.)
+    # 1. Inteligentne dopasowanie drużyny z mapą synonimów i ochroną przed kolizjami
     selected_team_filter = None
     if cr_team != "Wszystkie (Liga)":
         selected_team_filter = cr_team
     else:
-        # Słowa pospolite w nazwach klubów, które same w sobie NIE mogą decydować o trafieniu
-        GENERIC_CLUB_WORDS = {"city", "united", "town", "real", "fc", "gks", "ks", "de", "la", "cf", "ac", "inter", "sporting"}
+        # Słownik popularnych skrótów i aliasów klubowych
+        CLUB_ALIASES = {
+            "manchester city": ["man city", "manchester city", "city", "mcfc", "obywatele"],
+            "manchester united": ["man utd", "manchester united", "man united", "united", "mufc", "czerwone diably"],
+            "nottingham forest": ["nottingham", "forest", "nffc"],
+            "wolverhampton wanderers": ["wolves", "wolverhampton"],
+            "newcastle united": ["newcastle"],
+            "west ham united": ["west ham"],
+            "brighton & hove albion": ["brighton"],
+            "tottenham hotspur": ["tottenham", "spurs"],
+            "atletico madrid": ["atletico", "atlético"],
+            "real madrid": ["real madryt", "real madrid"],
+            "inter": ["inter mediolan", "inter milan", "inter"],
+            "milan": ["ac milan", "milan"],
+            "bayern münchen": ["bayern", "bayern monachium", "bayern munich"],
+            "borussia dortmund": ["dortmund", "bvb"],
+            "paris saint-germain": ["psg", "paris"],
+            
+        }
 
-        # Krok 1: Szukamy pełnej nazwy drużyny (od najdłuższych nazw, aby 'Hull City' wygrało z 'City')
-        sorted_teams = sorted(team_stats["Team"].unique(), key=lambda x: len(normalize_nlp(x)), reverse=True)
-        for t_cand in sorted_teams:
-            t_clean = normalize_nlp(t_cand)
-            if t_clean in q_norm:
-                selected_team_filter = t_cand
+        # KROK 1: Sprawdzenie dedykowanych synonimów
+        for real_team in team_stats["Team"].unique():
+            real_clean = normalize_nlp(real_team)
+            # Sprawdzamy czy którykolwiek alias pasuje do wpisanego zapytania
+            for canonical_key, aliases in CLUB_ALIASES.items():
+                if canonical_key in real_clean or real_clean in canonical_key:
+                    for alias in aliases:
+                        # Szukamy aliasu jako pełnego słowa / frazy
+                        if f" {alias} " in f" {q_norm} ":
+                            selected_team_filter = real_team
+                            break
+                if selected_team_filter:
+                    break
+            if selected_team_filter:
                 break
 
-        # Krok 2: Jeśli nie wpisano pełnej nazwy, szukamy po unikalnym członie (np. samo 'Hull', 'Newcastle', 'Lech')
+        # KROK 2: Jeśli alias nie trafił – szukamy pełnych nazw w zapytaniu (od najdłuższych)
         if not selected_team_filter:
+            sorted_teams = sorted(team_stats["Team"].unique(), key=lambda x: len(normalize_nlp(x)), reverse=True)
+            for t_cand in sorted_teams:
+                t_clean = normalize_nlp(t_cand)
+                if t_clean in q_norm:
+                    selected_team_filter = t_cand
+                    break
+
+        # KROK 3: Szukanie po unikalnym członie (z dodanym 'manchester' do słów pospolitych!)
+        if not selected_team_filter:
+            GENERIC_CLUB_WORDS = {
+                "city", "united", "town", "real", "fc", "gks", "ks", "de", "la", 
+                "cf", "ac", "inter", "manchester", "madrid", "milan"
+            }
             for t_cand in sorted_teams:
                 t_clean = normalize_nlp(t_cand)
                 unique_words = [w for w in t_clean.split() if len(w) >= 3 and w not in GENERIC_CLUB_WORDS]
-                if any(w in q_norm for w in unique_words):
+                if any(f" {w} " in f" {q_norm} " for w in unique_words):
                     selected_team_filter = t_cand
                     break
 
