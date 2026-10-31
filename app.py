@@ -1230,7 +1230,7 @@ display_df[float_cols] = display_df[float_cols].round(2)
 display_df.columns = [col.replace("_", " ") for col in display_df.columns]
 
 # Zakładki
-tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h, tab_analiza_ligowa, tab_asystent_ai, tab_zaleznosci = st.tabs([
+tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h, tab_analiza_ligowa, tab_analiza_meczu, tab_asystent_ai, tab_zaleznosci = st.tabs([
     t("tab_general"),
     t("tab_offense"), 
     t("tab_defense"),
@@ -1238,6 +1238,7 @@ tab_ogolne, tab_ofensywa, tab_defensywa, tab_podania, tab_druzyny, tab_h2h, tab_
     t("tab_teams"),
     t("tab_h2h"),
     " Analiza Ligowa AI" if selected_lang == "PL" else " League AI Scout",
+    " Analiza Meczu" if selected_lang == "PL" else " Match Analysis",
     " Asystent AI (Zapytania)" if selected_lang == "PL" else " AI Scout Copilot",
     t("tab_insights"),
     
@@ -4283,9 +4284,210 @@ with tab_analiza_ligowa:
         st.error(f" **Strefa Problemowa (Dolne 25%):**\n\n" + ", ".join(tier_zagrozenie))
 
 
+
 # =========================================================================
+# NOWA ZAKŁADKA: ANALIZA MECZU (MATCH ANALYSIS)
+# =========================================================================
+with tab_analiza_meczu:
+    st.header("🏟️ Szczegółowa Analiza Meczu & Próbki Formy" if selected_lang == "PL" else "🏟️ Match Deep-Dive & Form Sample Analysis")
+    st.caption(
+        "Przeanalizuj pojedyncze spotkanie lub serię ostatnich meczów wybranego zespołu w zderzeniu z rywalem i jego normą sezonową."
+        if selected_lang == "PL" else
+        "Analyze a single fixture or a sliding window of recent matches versus seasonal team baselines."
+    )
+
+    # 1. Filtry główne: wybór drużyny i suwak zakresu meczów
+    col_team_sel, col_scope_sel = st.columns([1.6, 1.4])
+    
+    with col_team_sel:
+        all_teams_list = sorted(team_stats["Team"].unique().tolist())
+        selected_match_team = st.selectbox(
+            "Wybierz zespół do analizy:" if selected_lang == "PL" else "Select Team to Analyze:",
+            all_teams_list,
+            index=0,
+            key="sb_match_analysis_team"
+        )
+        
+    t_history = matches_df[matches_df["Team"] == selected_match_team].copy().reset_index(drop=True)
+    t_history["Kolejka"] = t_history.index + 1
+    max_available_matches = len(t_history)
+
+    with col_scope_sel:
+        match_window = st.slider(
+            "Liczba meczów do analizy (1 = konkretny mecz):" if selected_lang == "PL" else "Matches to evaluate (1 = single match):",
+            min_value=1,
+            max_value=max(1, min(10, max_available_matches)),
+            value=1,
+            step=1,
+            key="slider_match_analysis_window"
+        )
+
+    # 2. Pobranie danych: pojedynczy mecz lub próbka N meczów
+    if match_window == 1:
+        match_options = [
+            f"Kolejka {r['Kolejka']}: vs {r['Opponent']} ({'Dom' if r['Venue'] == 'Home' else 'Wyjazd'}) [{int(r['Goals_For'])}:{int(r['Goals_Against'])}]"
+            for _, r in t_history.iterrows()
+        ]
+        selected_fixture_label = st.selectbox(
+            "Wybierz konkretne spotkanie:" if selected_lang == "PL" else "Select Specific Fixture:",
+            match_options,
+            index=len(match_options) - 1 if len(match_options) > 0 else 0,
+            key="sb_match_analysis_fixture"
+        )
+        sel_idx = match_options.index(selected_fixture_label)
+        analyzed_sample = t_history.iloc[[sel_idx]].copy()
+        is_single_fixture = True
+    else:
+        analyzed_sample = t_history.tail(match_window).copy()
+        is_single_fixture = False
+
+    team_season_row = team_stats[team_stats["Team"] == selected_match_team].iloc[0]
+
+    # 3. Karta nagłówkowa meczu / próbki
+    st.markdown("---")
+    if is_single_fixture:
+        f_row = analyzed_sample.iloc[0]
+        v_str = "Dom (Home)" if f_row["Venue"] == "Home" else "Wyjazd (Away)"
+        res_color = "#10B981" if f_row["Points"] == 3 else ("#EF4444" if f_row["Points"] == 0 else "#38BDF8")
+        
+        st.markdown(
+            f"""
+            <div style="background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; padding: 14px 20px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="font-size: 18px; font-weight: 800; color: #FFFFFF;">
+                        {selected_match_team} <span style="color: #8B949E; font-size: 13px;">({v_str})</span>
+                    </div>
+                    <div style="font-size: 24px; font-weight: 800; color: {res_color};">
+                        {int(f_row['Goals_For'])} : {int(f_row['Goals_Against'])}
+                    </div>
+                    <div style="font-size: 18px; font-weight: 800; color: #E2E8F0;">
+                        {f_row['Opponent']}
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        pts_sum = analyzed_sample["Points"].sum()
+        max_pts = len(analyzed_sample) * 3
+        st.markdown(
+            f"""
+            <div style="background-color: #161B22; border-left: 4px solid #38BDF8; border-radius: 6px; padding: 10px 16px; margin-bottom: 15px;">
+                <span style="font-size: 15px; font-weight: 700; color: #FFFFFF;">
+                    Próbka ostatnich <b>{match_window}</b> spotkań zespołu <b>{selected_match_team}</b>: zdobycz <b>{pts_sum}/{max_pts} pkt</b>
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # 4. Kafelki kluczowych parametrów
+    c1, c2, c3, c4 = st.columns(4)
+    sample_xg_for = analyzed_sample["xG_For"].mean()
+    sample_xg_opp = analyzed_sample["xG_Against"].mean()
+    sample_sot_for = analyzed_sample["Shots_On_Target"].mean()
+    sample_box_for = analyzed_sample["Box_Shots"].mean()
+
+    c1.metric(
+        label="xG Zespołu" if selected_lang == "PL" else "Team xG",
+        value=f"{sample_xg_for:.2f}",
+        delta=f"{sample_xg_for - team_season_row['xG_na_mecz']:+.2f} vs norma"
+    )
+    c2.metric(
+        label="xGA Dopuszczone" if selected_lang == "PL" else "Conceded xGA",
+        value=f"{sample_xg_opp:.2f}",
+        delta=f"{sample_xg_opp - team_season_row['xGA_na_mecz']:+.2f} vs norma",
+        delta_color="inverse"
+    )
+    c3.metric(
+        label="Strzały Celne" if selected_lang == "PL" else "Shots on Target",
+        value=f"{sample_sot_for:.1f}",
+        delta=f"{sample_sot_for - team_season_row['Celne_strzaly']:+.1f} vs norma"
+    )
+    c4.metric(
+        label="Strzały z Szesnastki" if selected_lang == "PL" else "Box Shots",
+        value=f"{sample_box_for:.1f}",
+        delta=f"{sample_box_for - team_season_row['Strzaly_z_pola_karnego']:+.1f} vs norma"
+    )
+
+    # 5. Tabela zestawcza: Próbka meczowa vs Norma sezonowa
+    st.markdown("---")
+    st.subheader("📋 Zestawienie Występu z Normą Sezonową" if selected_lang == "PL" else "📋 Performance vs Seasonal Baseline")
+
+    METRICS_MATCH_COMPARE = [
+        ("xG Ogólne", "xG_For", "xG_na_mecz", False),
+        ("xG z Gry Otwartej (OP)", "xG_OP_For", "xG_OP_na_mecz", False),
+        ("xG ze SFG", "xG_SP_For", "xG_SP_na_mecz", False),
+        ("Jakość Strzałów (xGOT)", "xGOT_For", "xGOT_na_mecz", False),
+        ("Dopuszczone xGA", "xG_Against", "xGA_na_mecz", True),
+        ("Strzały Ogółem", "Shots", "Strzaly_na_mecz", False),
+        ("Strzały z Pola Karnego", "Box_Shots", "Strzaly_z_pola_karnego", False),
+        ("Kontakty w Polu Karnym", "Box_Touches", "Box_Touches_Mean", False),
+        ("Posiadanie Piłki (%)", "Possession", "Posiadanie", False),
+        ("Celne Podania", "Passes_Acc", "Podania_celne", False),
+        ("Wygrane Pojedynki", "Duels_Won", "Pojedynki_Wygrane", False),
+    ]
+
+    compare_rows = []
+    chart_metrics = []
+    chart_sample_vals = []
+    chart_season_vals = []
+
+    for lbl, m_col, season_col, lower_is_better in METRICS_MATCH_COMPARE:
+        if m_col in analyzed_sample.columns and season_col in team_season_row:
+            val_sample = float(analyzed_sample[m_col].mean())
+            val_season = float(team_season_row[season_col])
+            delta = val_sample - val_season
+            pct_delta = ((delta / val_season) * 100.0) if val_season > 0 else 0.0
+
+            compare_rows.append({
+                "Metryka": lbl,
+                "Wynik w Próbce": f"{val_sample:.2f}",
+                "Średnia Sezonowa": f"{val_season:.2f}",
+                "Odchylenie (Delta)": f"{delta:+.2f} ({pct_delta:+.0f}%)"
+            })
+            chart_metrics.append(lbl)
+            chart_sample_vals.append(val_sample)
+            chart_season_vals.append(val_season)
+
+    col_tbl, col_plt = st.columns([1.1, 1.3])
+    with col_tbl:
+        st.dataframe(pd.DataFrame(compare_rows), use_container_width=True, hide_index=True)
+
+    with col_plt:
+        fig_m_bar = go.Figure()
+        fig_m_bar.add_trace(go.Bar(
+            y=chart_metrics,
+            x=chart_sample_vals,
+            name="Analizowany Mecz/Próbka" if selected_lang == "PL" else "Analyzed Fixture/Sample",
+            orientation='h',
+            marker_color="#38BDF8",
+            text=[f"{v:.1f}" for v in chart_sample_vals],
+            textposition="outside"
+        ))
+        fig_m_bar.add_trace(go.Bar(
+            y=chart_metrics,
+            x=chart_season_vals,
+            name="Norma Sezonowa" if selected_lang == "PL" else "Season Avg",
+            orientation='h',
+            marker_color="#64748B",
+            text=[f"{v:.1f}" for v in chart_season_vals],
+            textposition="outside"
+        ))
+        fig_m_bar.update_layout(
+            barmode="group",
+            height=490,
+            template="plotly_dark",
+            paper_bgcolor="#0E1117",
+            plot_bgcolor="#161B22",
+            margin=dict(l=140, r=40, t=30, b=30),
+            yaxis=dict(autorange="reversed"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+        )
+        st.plotly_chart(fig_m_bar, use_container_width=True)
+
 # ZAKŁADKA: ASYSTENT AI & ZAAWANSOWANA WYSZUKIWARKA MECZOWA
-# =========================================================================
 with tab_asystent_ai:
     st.header(" Inteligentny Asystent Analityczny & Wyszukiwarka Meczowa" if selected_lang == "PL" else " AI Tactical Scout & Advanced Match Query Engine")
     st.caption(
