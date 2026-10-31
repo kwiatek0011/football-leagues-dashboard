@@ -4289,7 +4289,7 @@ with tab_analiza_ligowa:
 # NOWA ZAKŁADKA: ANALIZA MECZU (MATCH ANALYSIS)
 # =========================================================================
 with tab_analiza_meczu:
-    st.header("🏟️ Szczegółowa Analiza Meczu & Próbki Formy" if selected_lang == "PL" else "🏟️ Match Deep-Dive & Form Sample Analysis")
+    st.header(" Szczegółowa Analiza Meczu & Próbki Formy" if selected_lang == "PL" else " Match Deep-Dive & Form Sample Analysis")
     st.caption(
         "Przeanalizuj pojedyncze spotkanie lub serię ostatnich meczów wybranego zespołu w zderzeniu z rywalem i jego normą sezonową."
         if selected_lang == "PL" else
@@ -4413,7 +4413,7 @@ with tab_analiza_meczu:
 
     # 5. Tabela zestawcza: Próbka meczowa vs Norma sezonowa
     st.markdown("---")
-    st.subheader("📋 Zestawienie Występu z Normą Sezonową" if selected_lang == "PL" else "📋 Performance vs Seasonal Baseline")
+    st.subheader(" Zestawienie Występu z Normą Sezonową" if selected_lang == "PL" else " Performance vs Seasonal Baseline")
 
     METRICS_MATCH_COMPARE = [
         ("xG Ogólne", "xG_For", "xG_na_mecz", False),
