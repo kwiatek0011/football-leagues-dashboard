@@ -2777,7 +2777,7 @@ with tab_druzyny:
         fig_p.add_shape(type="path", path="M 88.5, 26.5 A 9.15,9.15 0 0,0 88.5, 41.5", line=dict(color=line_col, width=1.5))
 
         fig_p.update_layout(
-            height=530,
+            height=330,
             xaxis=dict(visible=False, range=[-3, 108], fixedrange=True),
             yaxis=dict(visible=False, range=[-3, 71], scaleanchor="x", scaleratio=1, fixedrange=True),
             plot_bgcolor="#0E1117", paper_bgcolor="#0E1117", margin=dict(l=10, r=10, t=30, b=10),
