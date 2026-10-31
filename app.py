@@ -4854,19 +4854,25 @@ with tab_analiza_meczu:
         xg_val = m_row.get("xG_For" if is_attack else "xG_Against", 0.0)
 
         fig_p.update_layout(
-            height=430,  # Pełna wysokość dopasowana do widoku 50/50
+            height=340,
             template="plotly_dark",
             paper_bgcolor="#0E1117",
             plot_bgcolor="#0E1117",
             title=dict(
                 text=f"<b>{pitch_title}</b><br><span style='font-size: 11px; color: #94A3B8;'>Łącznie: <b>{tot_shots} strzałów</b> | Zagrożenie: <b>{xg_val:.2f} xG</b></span>",
-                x=0.03, y=0.96, font=dict(size=13.5, color="#FFFFFF")
+                x=0.03, y=0.96, font=dict(size=13, color="#FFFFFF")
             ),
             xaxis=dict(visible=False, range=[-3, 108], fixedrange=True),
-            yaxis=dict(visible=False, range=[-3, 71], fixedrange=True),
-            margin=dict(l=15, r=15, t=55, b=15),
+            yaxis=dict(
+                visible=False, 
+                range=[-3, 71], 
+                scaleanchor="x",  # Blokada proporcji: zapobiega pionowemu rozciąganiu
+                scaleratio=1,     # Okrągłe koło środkowe
+                fixedrange=True
+            ),
+            margin=dict(l=10, r=10, t=50, b=10),
             showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1, font=dict(size=11))
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=10.5))
         )
         return fig_p
 
