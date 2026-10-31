@@ -3298,17 +3298,21 @@ def generate_tactical_ai_insights(df, team_a, team_b, metrics_config, threshold=
         norm_za = -za if lower_is_better else za
         norm_zb = -zb if lower_is_better else zb
         
+        # Etykiety odchylenia zależne od języka (usuwamy też podwójny plus ++)
+        txt_above = "above league" if lang == "EN" else "ponad ligę"
+        txt_below = "below league" if lang == "EN" else "poniżej ligi"
+
         # Wykrywanie atutów i mankamentów Drużyny A
         if norm_za >= threshold:
-            insights_a.append((f" **{lbl}**: {val_a:.2f} *(+{za:+.1f}σ ponad ligę)*", "strength"))
+            insights_a.append((f" **{lbl}**: {val_a:.2f} *({za:+.1f}σ {txt_above})*", "strength"))
         elif norm_za <= -threshold:
-            insights_a.append((f" **{lbl}**: {val_a:.2f} *({za:+.1f}σ poniżej ligi)*", "weakness"))
+            insights_a.append((f" **{lbl}**: {val_a:.2f} *({za:+.1f}σ {txt_below})*", "weakness"))
             
         # Wykrywanie atutów i mankamentów Drużyny B
         if norm_zb >= threshold:
-            insights_b.append((f" **{lbl}**: {val_b:.2f} *(+{zb:+.1f}σ ponad ligę)*", "strength"))
+            insights_b.append((f" **{lbl}**: {val_b:.2f} *({zb:+.1f}σ {txt_above})*", "strength"))
         elif norm_zb <= -threshold:
-            insights_b.append((f" **{lbl}**: {val_b:.2f} *({zb:+.1f}σ poniżej ligi)*", "weakness"))
+            insights_b.append((f" **{lbl}**: {val_b:.2f} *({zb:+.1f}σ {txt_below})*", "weakness"))
             
         # Wykrywanie bezpośrednich dysproporcji stylu
         diff_z = norm_za - norm_zb
@@ -3615,7 +3619,8 @@ with tab_h2h:
         col_ai_a, col_ai_b = st.columns(2)
 
         with col_ai_a:
-            st.markdown(f"####  {team_a} vs Liga ({len(ins_a)} anomalii)")
+            title_a = f"#### {team_a} vs League ({len(ins_a)} anomalies)" if selected_lang == "EN" else f"#### {team_a} vs Liga ({len(ins_a)} anomalii)"
+            st.markdown(title_a)
             if ins_a:
                 for text, kind in ins_a:
                     if kind == "strength":
@@ -3623,10 +3628,11 @@ with tab_h2h:
                     else:
                         st.error(text)
             else:
-                st.info("Brak istotnych odchyleń przy bieżącym progu czułości." if selected_lang == "PL" else "No significant deviations at current threshold.")
+                st.info("No significant deviations at current threshold." if selected_lang == "EN" else "Brak istotnych odchyleń przy bieżącym progu czułości.")
 
         with col_ai_b:
-            st.markdown(f"####  {team_b} vs Liga ({len(ins_b)} anomalii)")
+            title_b = f"#### {team_b} vs League ({len(ins_b)} anomalies)" if selected_lang == "EN" else f"#### {team_b} vs Liga ({len(ins_b)} anomalii)"
+            st.markdown(title_b)
             if ins_b:
                 for text, kind in ins_b:
                     if kind == "strength":
@@ -3634,12 +3640,13 @@ with tab_h2h:
                     else:
                         st.error(text)
             else:
-                st.info("Brak istotnych odchyleń przy bieżącym progu czułości." if selected_lang == "PL" else "No significant deviations at current threshold.")
+                st.info("No significant deviations at current threshold." if selected_lang == "EN" else "Brak istotnych odchyleń przy bieżącym progu czułości.")
 
         if clashes:
-            st.markdown(f"####  Główne Różnice Stylistyczne w tym Meczu ({len(clashes)})" if selected_lang == "PL" else f"####  Critical Stylistic Clashes ({len(clashes)})")
+            title_clashes = f"#### Critical Stylistic Clashes ({len(clashes)})" if selected_lang == "EN" else f"#### Główne Różnice Stylistyczne w tym Meczu ({len(clashes)})"
+            st.markdown(title_clashes)
             for c in clashes:
-                st.warning(c)    
+                st.warning(c)  
 
 
     # =========================================================
