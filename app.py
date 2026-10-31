@@ -4554,39 +4554,78 @@ with tab_analiza_meczu:
         st.dataframe(df_comp_display, use_container_width=True, hide_index=True, height=max(450, min(800, len(compare_rows) * 35 + 40)))
 
     with col_plt:
-        # Dynamiczna wysokość wykresu dopasowana do liczby wybranych metryk
-        chart_height = max(450, min(800, len(chart_metrics) * 28 + 60))
-        
-        fig_m_bar = go.Figure()
-        fig_m_bar.add_trace(go.Bar(
-            y=chart_metrics,
-            x=chart_sample_vals,
-            name="Analizowany Mecz/Próbka" if selected_lang == "PL" else "Analyzed Fixture/Sample",
-            orientation='h',
-            marker_color="#38BDF8",
-            text=[f"{v:.1f}" for v in chart_sample_vals],
-            textposition="outside"
-        ))
-        fig_m_bar.add_trace(go.Bar(
-            y=chart_metrics,
-            x=chart_season_vals,
-            name="Norma Sezonowa" if selected_lang == "PL" else "Season Avg",
-            orientation='h',
-            marker_color="#64748B",
-            text=[f"{v:.1f}" for v in chart_season_vals],
-            textposition="outside"
-        ))
-        fig_m_bar.update_layout(
-            barmode="group",
-            height=chart_height,
-            template="plotly_dark",
-            paper_bgcolor="#0E1117",
-            plot_bgcolor="#161B22",
-            margin=dict(l=150, r=40, t=30, b=30),
-            yaxis=dict(autorange="reversed"),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+        # Słownik przechowujący wartości dla każdej metryki z tabeli
+        metrics_dict = {
+            m: (s_val, sea_val) 
+            for m, s_val, sea_val in zip(chart_metrics, chart_sample_vals, chart_season_vals)
+        }
+        all_metrics_list = list(metrics_dict.keys())
+
+        # Propozycje domyślnych metryk na start
+        default_candidates = [
+            "xG Ogólne", "xGA Dopuszczone", "Jakość Strzałów (xGOT)",
+            "Strzały z Pola Karnego", "Kontakty w Polu Karnym", "Wygrane Pojedynki Ogółem",
+            "Expected Goals (xG)", "Conceded xGA", "Shot Quality (xGOT)",
+            "Shots Inside Box", "Box Touches", "Total Duels Won"
+        ]
+        default_selected = [m for m in default_candidates if m in all_metrics_list]
+        if not default_selected:
+            default_selected = all_metrics_list[:6]
+
+        # Rozwijany pasek ze wszystkimi dostępnymi statystykami
+        chosen_metrics = st.multiselect(
+            "Wybierz statystyki do porównania na wykresie:" if selected_lang == "PL" else "Select metrics to compare on chart:",
+            options=all_metrics_list,
+            default=default_selected,
+            key="ms_match_chart_metrics_selector"
         )
-        st.plotly_chart(fig_m_bar, use_container_width=True)
+
+        if chosen_metrics:
+            plt_sample_vals = [metrics_dict[m][0] for m in chosen_metrics]
+            plt_season_vals = [metrics_dict[m][1] for m in chosen_metrics]
+
+            # Dynamiczna wysokość dopasowana do wybranej liczby słupków
+            chart_height = max(320, len(chosen_metrics) * 42 + 60)
+
+            fig_m_bar = go.Figure()
+            fig_m_bar.add_trace(go.Bar(
+                y=chosen_metrics,
+                x=plt_sample_vals,
+                name="Analizowany Mecz/Próbka" if selected_lang == "PL" else "Analyzed Fixture/Sample",
+                orientation='h',
+                marker_color="#38BDF8",
+                text=[f"{v:.2f}" for v in plt_sample_vals],
+                textposition="outside",
+                textfont=dict(color="#FFFFFF", size=11)
+            ))
+            fig_m_bar.add_trace(go.Bar(
+                y=chosen_metrics,
+                x=plt_season_vals,
+                name="Norma Sezonowa" if selected_lang == "PL" else "Season Avg",
+                orientation='h',
+                marker_color="#64748B",
+                text=[f"{v:.2f}" for v in plt_season_vals],
+                textposition="outside",
+                textfont=dict(color="#CBD5E1", size=11)
+            ))
+
+            max_val = max(plt_sample_vals + plt_season_vals) if (plt_sample_vals and plt_season_vals) else 5
+            x_limit = max_val * 1.25 if max_val > 0 else 5
+
+            fig_m_bar.update_layout(
+                barmode="group",
+                height=chart_height,
+                template="plotly_dark",
+                paper_bgcolor="#0E1117",
+                plot_bgcolor="#161B22",
+                margin=dict(l=160, r=40, t=30, b=30),
+                yaxis=dict(autorange="reversed", tickfont=dict(size=11, color="#E2E8F0")),
+                xaxis=dict(showgrid=True, gridcolor="#21262D", range=[0, x_limit]),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
+            )
+            st.plotly_chart(fig_m_bar, use_container_width=True)
+        else:
+            st.info("Wybierz co najmniej jedną statystykę z powyższego paska, aby wyrenderować wykres." if selected_lang == "PL" else "Select at least one metric to display the chart.")
 
 # ZAKŁADKA: ASYSTENT AI & ZAAWANSOWANA WYSZUKIWARKA MECZOWA
 with tab_asystent_ai:
