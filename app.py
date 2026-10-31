@@ -4285,10 +4285,7 @@ with tab_analiza_ligowa:
 
 
 
-# =========================================================================
-# NOWA ZAKŁADKA: ANALIZA MECZU (MATCH ANALYSIS)
-# =========================================================================
-# =========================================================================
+
 # ZAKŁADKA: SZCZEGÓŁOWA ANALIZA MECZU (MATCH ANALYSIS)
 # =========================================================================
 with tab_analiza_meczu:
@@ -4400,83 +4397,134 @@ with tab_analiza_meczu:
     c4.metric("Strzały z Szesnastki" if selected_lang == "PL" else "Box Shots", f"{sample_box_for:.1f}", f"{sample_box_for - team_season_row['Strzaly_z_pola_karnego']:+.1f} vs norma")
 
     # =====================================================================
-    # MODUŁ 4: ALGORYTMICZNE PODSUMOWANIE POMECZOWE AI (EXECUTIVE BRIEF)
+    # MODUŁ 4: ELASTYCZNA DIAGNOZA TAKTYCZNA AI (DYNAMICZNA DLA 1 DO N MECZÓW)
     # =====================================================================
     st.markdown("---")
-    st.subheader(" Pomeczowa Diagnoza Taktyczna AI" if selected_lang == "PL" else " AI Match Executive Debrief")
+    
+    # Dynamiczny nagłówek w zależności od suwaka
+    if is_single_fixture:
+        diag_title = f" Diagnoza Pomeczowa AI: vs {opp_name} (Kolejka {analyzed_sample.iloc[0]['Kolejka']})"
+        diag_caption = f"Wykryte skoki i załamania formy zespołu {selected_match_team} w tym konkretnym spotkaniu względem normy sezonowej."
+    else:
+        diag_title = f" Raport Formy AI: Próbka ostatnich {match_window} meczów"
+        diag_caption = f"Analiza dynamiki trendów zespołu {selected_match_team} na dystansie ostatnich {match_window} kolejek."
 
-    # Wyliczanie kluczowych motorów i słabości w zderzeniu z normą sezonową
-    brief_candidates = [
-        ("xG Ogólne", "xG_For", "xG_na_mecz", False),
-        ("xG z Gry Otwartej", "xG_OP_For", "xG_OP_na_mecz", False),
-        ("xG ze SFG", "xG_SP_For", "xG_SP_na_mecz", False),
-        ("Dopuszczone xGA", "xG_Against", "xGA_na_mecz", True),
-        ("Strzały z Szesnastki", "Box_Shots", "Strzaly_z_pola_karnego", False),
-        ("Kontakty w Polu Karnym", "Box_Touches", "Box_Touches_Mean", False),
-        ("Posiadanie Piłki", "Possession", "Posiadanie", False),
-        ("Celne Podania", "Passes_Acc", "Podania_celne", False),
-        ("Wygrane Pojedynki", "Duels_Won", "Pojedynki_Wygrane", False),
+    st.subheader(diag_title)
+    st.caption(diag_caption)
+
+    # Pełna pula parametrów do skanowania odchyleń
+    ai_audit_metrics = [
+        ("Gole Strzelone", "Goals_For", "Gole_na_mecz", False, "{:.0f}"),
+        ("Gole Stracone", "Goals_Against", "Gole_stracone_na_mecz", True, "{:.0f}"),
+        ("xG Ogólne", "xG_For", "xG_na_mecz", False, "{:.2f}"),
+        ("Dopuszczone xGA", "xG_Against", "xGA_na_mecz", True, "{:.2f}"),
+        ("xG z Gry Otwartej (OP)", "xG_OP_For", "xG_OP_na_mecz", False, "{:.2f}"),
+        ("xGA z Gry Otwartej (OP)", "xG_OP_Against", "xGA_OP_na_mecz", True, "{:.2f}"),
+        ("xG ze SFG", "xG_SP_For", "xG_SP_na_mecz", False, "{:.2f}"),
+        ("xGA ze SFG", "xG_SP_Against", "xGA_SP_na_mecz", True, "{:.2f}"),
+        ("Jakość Strzałów (xGOT)", "xGOT_For", "xGOT_na_mecz", False, "{:.2f}"),
+        ("Strzały Ogółem", "Shots", "Strzaly_na_mecz", False, "{:.1f}"),
+        ("Strzały z Pola Karnego", "Box_Shots", "Strzaly_z_pola_karnego", False, "{:.1f}"),
+        ("Strzały Rywala z Pola Karnego", "Box_Shots_Against", "Box_Shots_Against_Mean", True, "{:.1f}"),
+        ("Kontakty w Polu Karnym", "Box_Touches", "Box_Touches_Mean", False, "{:.1f}"),
+        ("Wielkie Szanse (Big Chances)", "Big_Chances", "Big_Chances", False, "{:.1f}"),
+        ("Posiadanie Piłki (%)", "Possession", "Posiadanie", False, "{:.1f}%"),
+        ("Podania na Połowie Rywala", "Passes_Opp_Half", "Passes_Opp_Half_Mean", False, "{:.1f}"),
+        ("Celne Podania", "Passes_Acc", "Podania_celne", False, "{:.1f}"),
+        ("Celne Długie Piłki", "Long_Balls", "Long_Balls_Mean", False, "{:.1f}"),
+        ("Wygrane Pojedynki Ogółem", "Duels_Won", "Pojedynki_Wygrane", False, "{:.1f}"),
+        ("Odbiory", "Tackles", "Odbiory", False, "{:.1f}"),
+        ("Przejęcia", "Interceptions", "Przejecia", False, "{:.1f}"),
     ]
 
-    deltas_positive = []
-    deltas_negative = []
+    list_positives = []
+    list_negatives = []
 
-    for name_m, c_match, c_sea, lower_better in brief_candidates:
-        if c_match in analyzed_sample.columns and c_sea in team_season_row:
-            v_m = float(analyzed_sample[c_match].mean())
-            v_s = float(team_season_row[c_sea])
-            diff = v_m - v_s
-            pct_d = (diff / v_s * 100.0) if v_s > 0 else 0.0
+    for m_label, col_match, col_sea, lower_is_better, fmt_str in ai_audit_metrics:
+        if col_match in analyzed_sample.columns and col_sea in team_season_row:
+            v_curr = float(analyzed_sample[col_match].mean())
+            v_base = float(team_season_row[col_sea])
+            delta = v_curr - v_base
+            pct_change = ((delta / v_base) * 100.0) if v_base > 0 else 0.0
 
-            if not lower_better:
-                if diff > 0: deltas_positive.append((name_m, v_m, v_s, pct_d))
-                elif diff < 0: deltas_negative.append((name_m, v_m, v_s, pct_d))
-            else:
-                if diff < 0: deltas_positive.append((name_m, v_m, v_s, pct_d))
-                elif diff > 0: deltas_negative.append((name_m, v_m, v_s, pct_d))
+            # Próg wykrywania: min. 10% odchylenia
+            if abs(pct_change) >= 10.0:
+                is_advantage = (delta < 0) if lower_is_better else (delta > 0)
+                formatted_item = {
+                    "label": m_label,
+                    "curr": fmt_str.format(v_curr),
+                    "base": fmt_str.format(v_base),
+                    "delta": f"{delta:+.2f}",
+                    "pct": pct_change,
+                    "abs_pct": abs(pct_change)
+                }
+                if is_advantage:
+                    list_positives.append(formatted_item)
+                else:
+                    list_negatives.append(formatted_item)
 
-    deltas_positive.sort(key=lambda x: abs(x[3]), reverse=True)
-    deltas_negative.sort(key=lambda x: abs(x[3]), reverse=True)
+    # Sortujemy od najbardziej jaskrawych odchyleń
+    list_positives.sort(key=lambda x: x["abs_pct"], reverse=True)
+    list_negatives.sort(key=lambda x: x["abs_pct"], reverse=True)
 
-    # Ocena pracy bramkarza (Goals Prevented = xAGOT rywala - Bramki stracone)
-    sample_xgot_against = analyzed_sample["xGOT_Against"].sum() if "xGOT_Against" in analyzed_sample.columns else 0.0
-    sample_goals_conceded = analyzed_sample["Goals_Against"].sum()
-    sample_prevented = round(sample_xgot_against - sample_goals_conceded, 2)
+    # Zestawienie w dwóch czytelnych, lekkich kolumnach
+    col_diag_pos, col_diag_neg = st.columns(2)
 
-    b1, b2, b3 = st.columns(3)
-    with b1:
-        if deltas_positive:
-            top_pos = deltas_positive[0]
-            st.success(
-                f" **Główny Motor Napędowy:**\n\n"
-                f"**{top_pos[0]}**: wynik **{top_pos[1]:.2f}** (aż o **{top_pos[3]:+.0f}%** powyżej średniej sezonowej {top_pos[2]:.2f})."
-                if selected_lang == "PL" else
-                f" **Key Performance Driver:**\n\n"
-                f"**{top_pos[0]}**: recorded **{top_pos[1]:.2f}** (**{top_pos[3]:+.0f}%** above seasonal baseline {top_pos[2]:.2f})."
-            )
+    with col_diag_pos:
+        st.markdown(
+            f"""<div style="background-color: #0E161B; border-left: 3px solid #10B981; padding: 6px 12px; margin-bottom: 8px; border-radius: 4px;">
+                <span style="color: #10B981; font-weight: 700; font-size: 13.5px;"> Wyraźne Atuty i Wzrosty Formy ({len(list_positives)})</span>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        if list_positives:
+            for item in list_positives[:5]:  # Pokazujemy do 5 najmocniejszych
+                st.markdown(
+                    f"""<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #21262D; padding: 5px 2px; font-size: 12.5px;">
+                        <span><b style="color: #E2E8F0;">{item['label']}</b>: <span style="color: #FFFFFF; font-weight: 700;">{item['curr']}</span> <span style="color: #8B949E; font-size: 11px;">(norma: {item['base']})</span></span>
+                        <span style="background-color: #064E3B; color: #34D399; font-weight: 700; padding: 2px 7px; border-radius: 10px; font-size: 11px;">{item['pct']:+.0f}%</span>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
         else:
-            st.info("Zespół grał dokładnie na poziomie swojej średniej.")
-    with b2:
-        if deltas_negative:
-            top_neg = deltas_negative[0]
-            st.error(
-                f" **Kluczowy Mankament:**\n\n"
-                f"**{top_neg[0]}**: wynik **{top_neg[1]:.2f}** (spadek o **{top_neg[3]:+.0f}%** względem normy {top_neg[2]:.2f})."
-                if selected_lang == "PL" else
-                f" **Primary Tactical Flaw:**\n\n"
-                f"**{top_neg[0]}**: recorded **{top_neg[1]:.2f}** (**{top_neg[3]:+.0f}%** below seasonal baseline {top_neg[2]:.2f})."
-            )
+            st.caption("Brak statystyk przewyższających normę o min. 10%.")
+
+    with col_diag_neg:
+        st.markdown(
+            f"""<div style="background-color: #1A1215; border-left: 3px solid #EF4444; padding: 6px 12px; margin-bottom: 8px; border-radius: 4px;">
+                <span style="color: #EF4444; font-weight: 700; font-size: 13.5px;"> Ostrzeżenia i Spadki Formy ({len(list_negatives)})</span>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        if list_negatives:
+            for item in list_negatives[:5]:  # Pokazujemy do 5 najpoważniejszych
+                st.markdown(
+                    f"""<div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #21262D; padding: 5px 2px; font-size: 12.5px;">
+                        <span><b style="color: #E2E8F0;">{item['label']}</b>: <span style="color: #FFFFFF; font-weight: 700;">{item['curr']}</span> <span style="color: #8B949E; font-size: 11px;">(norma: {item['base']})</span></span>
+                        <span style="background-color: #7F1D1D; color: #F87171; font-weight: 700; padding: 2px 7px; border-radius: 10px; font-size: 11px;">{item['pct']:+.0f}%</span>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
         else:
-            st.info("Brak wyraźnych załamań formy w kluczowych wskaźnikach.")
-    with b3:
-        if sample_prevented > 0:
-            gk_msg = f"Bramkarz uratował **+{sample_prevented:.2f} gola** ponad stan (dopuszczone xGOT: {sample_xgot_against:.2f}, stracono: {int(sample_goals_conceded)})."
-            st.success(f" **Występ Bramkarza:**\n\n{gk_msg}")
-        elif sample_prevented < 0:
-            gk_msg = f"Deficyt bramkarza: **{sample_prevented:.2f} gola** (rywal z celnych strzałów miał {sample_xgot_against:.2f} xGOT, a strzelił {int(sample_goals_conceded)} goli)."
-            st.warning(f" **Występ Bramkarza:**\n\n{gk_msg}")
-        else:
-            st.info(" **Bramkarz:** Czysty bilans interwencji zgodny z jakością strzałów rywala.")
+            st.caption("Brak statystyk spadających poniżej normy o min. 10%.")
+
+    # Kompaktowy pasek defensywy i bramkarza (zamiast wielkiego pudła)
+    sum_xgot_opp = analyzed_sample["xGOT_Against"].sum() if "xGOT_Against" in analyzed_sample.columns else 0.0
+    sum_ga = analyzed_sample["Goals_Against"].sum()
+    diff_prevented = round(sum_xgot_opp - sum_ga, 2)
+    
+    if diff_prevented >= 0:
+        gk_badge = f'<span style="background-color: #064E3B; color: #34D399; padding: 2px 7px; border-radius: 8px; font-weight: 700;">+{diff_prevented:.2f} Gola uratowane</span>'
+    else:
+        gk_badge = f'<span style="background-color: #7F1D1D; color: #F87171; padding: 2px 7px; border-radius: 8px; font-weight: 700;">{diff_prevented:.2f} Gola deficytu</span>'
+
+    st.markdown(
+        f"""<div style="background-color: #161B22; border: 1px solid #30363D; border-radius: 6px; padding: 8px 14px; margin-top: 10px; display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+            <span style="color: #CBD5E1;"> <b>Bilans Bramkarza (Goals Prevented):</b> Rywale wygenerowali celne strzały o sile <b>{sum_xgot_opp:.2f} xGOT</b>, tracąc <b>{int(sum_ga)}</b> bramek.</span>
+            {gk_badge}
+        </div>""",
+        unsafe_allow_html=True
+    )
 
     # =====================================================================
     # MODUŁ 1: PEŁNE ZESTAWIENIE (PRZEŁĄCZNIK: SEZON vs RYWAL W MECZU)
