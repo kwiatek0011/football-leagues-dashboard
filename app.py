@@ -4412,50 +4412,151 @@ with tab_analiza_meczu:
     )
 
     # 5. Tabela zestawcza: Próbka meczowa vs Norma sezonowa
+    # 5. Pełna tabela zestawcza: Próbka meczowa vs Norma sezonowa (Komplet wszystkich metryk)
     st.markdown("---")
     st.subheader(" Zestawienie Występu z Normą Sezonową" if selected_lang == "PL" else " Performance vs Seasonal Baseline")
 
-    METRICS_MATCH_COMPARE = [
-        ("xG Ogólne", "xG_For", "xG_na_mecz", False),
-        ("xG z Gry Otwartej (OP)", "xG_OP_For", "xG_OP_na_mecz", False),
-        ("xG ze SFG", "xG_SP_For", "xG_SP_na_mecz", False),
-        ("Jakość Strzałów (xGOT)", "xGOT_For", "xGOT_na_mecz", False),
-        ("Dopuszczone xGA", "xG_Against", "xGA_na_mecz", True),
-        ("Strzały Ogółem", "Shots", "Strzaly_na_mecz", False),
-        ("Strzały z Pola Karnego", "Box_Shots", "Strzaly_z_pola_karnego", False),
-        ("Kontakty w Polu Karnym", "Box_Touches", "Box_Touches_Mean", False),
-        ("Posiadanie Piłki (%)", "Possession", "Posiadanie", False),
-        ("Celne Podania", "Passes_Acc", "Podania_celne", False),
-        ("Wygrane Pojedynki", "Duels_Won", "Pojedynki_Wygrane", False),
+    # Kompletna lista wszystkich dostępnych metryk:
+    # (Kategoria, Etykieta PL, Etykieta EN, Kolumna meczu, Kolumna sezonowa w team_stats, Mniej=Lepiej, Format)
+    FULL_MATCH_METRICS_REGISTRY = [
+        # --- BRAMKI I xG ---
+        ("Bramki i xG", "Gole Strzelone", "Goals Scored", "Goals_For", "Gole_na_mecz", False, "int"),
+        ("Bramki i xG", "Gole Stracone", "Goals Conceded", "Goals_Against", "Gole_stracone_na_mecz", True, "int"),
+        ("Bramki i xG", "xG Ogólne", "Expected Goals (xG)", "xG_For", "xG_na_mecz", False, "float"),
+        ("Bramki i xG", "xGA Dopuszczone", "Conceded xGA", "xG_Against", "xGA_na_mecz", True, "float"),
+        ("Bramki i xG", "xG z Gry Otwartej (OP)", "Open Play xG", "xG_OP_For", "xG_OP_na_mecz", False, "float"),
+        ("Bramki i xG", "xGA z Gry Otwartej (OP)", "Open Play xGA", "xG_OP_Against", "xGA_OP_na_mecz", True, "float"),
+        ("Bramki i xG", "xG ze SFG", "Set Play xG", "xG_SP_For", "xG_SP_na_mecz", False, "float"),
+        ("Bramki i xG", "xGA ze SFG", "Set Play xGA", "xG_SP_Against", "xGA_SP_na_mecz", True, "float"),
+        ("Bramki i xG", "npxG (bez karnych)", "Non-Penalty xG", "npxG_For", "npxG_na_mecz", False, "float"),
+        ("Bramki i xG", "npxGA (dopuszczone)", "Non-Penalty xGA", "npxG_Against", "npxGA_na_mecz", True, "float"),
+        ("Bramki i xG", "Jakość Strzałów (xGOT)", "Shot Quality (xGOT)", "xGOT_For", "xGOT_na_mecz", False, "float"),
+        ("Bramki i xG", "Jakość Strzałów Rywali (xAGOT)", "Opponent xAGOT", "xGOT_Against", "xAGOT_na_mecz", True, "float"),
+
+        # --- STRZAŁY I POLE KARNE ---
+        ("Strzały i Szesnastka", "Strzały Ogółem", "Total Shots", "Shots", "Strzaly_na_mecz", False, "int"),
+        ("Strzały i Szesnastka", "Strzały Dopuszczone Rywalom", "Shots Conceded", "Shots_Against", "Shots_Against_Mean", True, "int"),
+        ("Strzały i Szesnastka", "Strzały Celne", "Shots on Target", "Shots_On_Target", "Celne_strzaly", False, "int"),
+        ("Strzały i Szesnastka", "Strzały Celne Dopuszczone", "Shots on Target Conceded", "Shots_On_Target_Against", "Shots_On_Target_Against_Mean", True, "int"),
+        ("Strzały i Szesnastka", "Strzały Niecelne", "Shots Off Target", "Shots_Off_Target", "Shots_Off_Target_Mean", False, "int"),
+        ("Strzały i Szesnastka", "Strzały Zablokowane", "Blocked Shots", "Blocked_Shots", "Blocked_Shots_Mean", False, "int"),
+        ("Strzały i Szesnastka", "Strzały z Pola Karnego", "Shots Inside Box", "Box_Shots", "Strzaly_z_pola_karnego", False, "int"),
+        ("Strzały i Szesnastka", "Strzały Rywala z Pola Karnego", "Opponent Box Shots", "Box_Shots_Against", "Box_Shots_Against_Mean", True, "int"),
+        ("Strzały i Szesnastka", "Strzały z Dystansu", "Shots Outside Box", "Outside_Box_Shots", "Strzaly_zza_pola_karnego", False, "int"),
+        ("Strzały i Szesnastka", "Strzały Rywala z Dystansu", "Opponent Outside Box Shots", "Outside_Box_Shots_Against", "Outside_Box_Shots_Against_Mean", True, "int"),
+        ("Strzały i Szesnastka", "Kontakty w Polu Karnym", "Box Touches", "Box_Touches", "Box_Touches_Mean", False, "int"),
+        ("Strzały i Szesnastka", "Kontakty Rywala w Naszym Polu", "Opponent Box Touches", "Box_Touches_Against", "Box_Touches_Against_Mean", True, "int"),
+        ("Strzały i Szesnastka", "Wielkie Szanse (Big Chances)", "Big Chances", "Big_Chances", "Big_Chances", False, "int"),
+        ("Strzały i Szesnastka", "Wielkie Szanse Rywala", "Big Chances Conceded", "Big_Chances_Against", "Big_Chances_Against_Mean", True, "int"),
+        ("Strzały i Szesnastka", "Zmarnowane Wielkie Szanse", "Big Chances Missed", "Big_Chances_Missed", "Big_Chances_Missed", True, "int"),
+        ("Strzały i Szesnastka", "Strzały w Obramowanie", "Hit Woodwork", "Hit_Woodwork", "Woodwork_Mean", False, "int"),
+
+        # --- DYSTRYBUCJA I POSIADANIE ---
+        ("Dystrybucja i Podania", "Posiadanie Piłki (%)", "Ball Possession (%)", "Possession", "Posiadanie", False, "pct"),
+        ("Dystrybucja i Podania", "Podania Ogółem", "Total Passes", "Passes_Total", "Podania_ogolem", False, "int"),
+        ("Dystrybucja i Podania", "Podania Rywala", "Opponent Passes", "Passes_Total_Against", "Passes_Total_Against_Mean", True, "int"),
+        ("Dystrybucja i Podania", "Celne Podania", "Accurate Passes", "Passes_Acc", "Podania_celne", False, "int"),
+        ("Dystrybucja i Podania", "Podania na Własnej Połowie", "Own Half Passes", "Passes_Own_Half", "Passes_Own_Half_Mean", False, "int"),
+        ("Dystrybucja i Podania", "Podania na Połowie Rywala", "Opponent Half Passes", "Passes_Opp_Half", "Passes_Opp_Half_Mean", False, "int"),
+        ("Dystrybucja i Podania", "Dopuszczone Podania na Naszej Połowie", "Opp Passes in Our Half", "Passes_Opp_Half_Against", "Passes_Opp_Half_Against_Mean", True, "int"),
+        ("Dystrybucja i Podania", "Celne Długie Piłki", "Accurate Long Balls", "Long_Balls", "Long_Balls_Mean", False, "int"),
+        ("Dystrybucja i Podania", "Długie Piłki Rywala", "Opponent Long Balls", "Long_Balls_Against", "Long_Balls_Against_Mean", True, "int"),
+        ("Dystrybucja i Podania", "Celne Dośrodkowania", "Accurate Crosses", "Accurate_Crosses", "Accurate_Crosses_Mean", False, "int"),
+        ("Dystrybucja i Podania", "Wrzuty z Autu", "Throw-ins", "Throws", "Throws_Mean", False, "int"),
+
+        # --- POJEDYNKI I DEFENSIWA ---
+        ("Pojedynki i Obrona", "Wygrane Pojedynki Ogółem", "Total Duels Won", "Duels_Won", "Pojedynki_Wygrane", False, "int"),
+        ("Pojedynki i Obrona", "Wygrane Pojedynki na Ziemi", "Ground Duels Won", "Ground_Duels_Won", "Ground_Duels_Won_Mean", False, "int"),
+        ("Pojedynki i Obrona", "Wygrane Pojedynki w Powietrzu", "Aerial Duels Won", "Aerial_Duels_Won", "Aerial_Duels_Won_Mean", False, "int"),
+        ("Pojedynki i Obrona", "Odbiory", "Tackles", "Tackles", "Odbiory", False, "int"),
+        ("Pojedynki i Obrona", "Przejęcia", "Interceptions", "Interceptions", "Przejecia", False, "int"),
+        ("Pojedynki i Obrona", "Wybicia Piłki (Clearances)", "Clearances", "Clearances", "Clearances_Mean", False, "int"),
+        ("Pojedynki i Obrona", "Zablokowane Strzały (Bloki)", "Blocks", "Blocks", "Blocks_Mean", False, "int"),
+        ("Pojedynki i Obrona", "Udane Dryblingi", "Successful Dribbles", "Successful_Dribbles", "Dribbles_Mean", False, "int"),
+        ("Pojedynki i Obrona", "Obrony Bramkarza", "Goalkeeper Saves", "Keeper_Saves", "Keeper_Saves_Mean", False, "int"),
+        ("Pojedynki i Obrona", "Rzuty Rożne Wywalczone", "Corners Won", "Corners", "Rzuty_Rozne", False, "int"),
+        ("Pojedynki i Obrona", "Rzuty Rożne Dopuszczone", "Corners Conceded", "Corners_Against", "Corners_Against_Mean", True, "int"),
+
+        # --- DYSCYPLINA I INNE ---
+        ("Dyscyplina i Inne", "Faule Popełnione", "Fouls Committed", "Fouls", "Fouls_Mean", True, "int"),
+        ("Dyscyplina i Inne", "Faule Wymuszone", "Fouls Won", "Fouls_Against", "Fouls_Against_Mean", False, "int"),
+        ("Dyscyplina i Inne", "Żółte Kartki", "Yellow Cards", "Yellow_Cards", "Yellow_Cards_Mean", True, "int"),
+        ("Dyscyplina i Inne", "Czerwone Kartki", "Red Cards", "Red_Cards", "Red_Cards_Mean", True, "int"),
+        ("Dyscyplina i Inne", "Spalone", "Offsides", "Offsides", "Offsides_Mean", True, "int"),
     ]
 
+    # Przełącznik kategorii metryk (filtruje tabelę i wykres)
+    cat_options_pl = ["Wszystkie Metryki", "Bramki i xG", "Strzały i Szesnastka", "Dystrybucja i Podania", "Pojedynki i Obrona", "Dyscyplina i Inne"]
+    cat_options_en = ["All Metrics", "Goals & xG", "Shots & Box", "Passing & Possession", "Duels & Defense", "Discipline & Other"]
+    cat_options = cat_options_pl if selected_lang == "PL" else cat_options_en
+    
+    selected_cat_filter = st.pills(
+        "Filtruj kategorię metryk:" if selected_lang == "PL" else "Filter Metric Category:",
+        cat_options,
+        default=cat_options[0],
+        key="pills_match_deepdive_cat"
+    )
+
+    # Budowa wierszy porównania
     compare_rows = []
     chart_metrics = []
     chart_sample_vals = []
     chart_season_vals = []
 
-    for lbl, m_col, season_col, lower_is_better in METRICS_MATCH_COMPARE:
+    for cat_pl, lbl_pl, lbl_en, m_col, season_col, lower_is_better, val_fmt in FULL_MATCH_METRICS_REGISTRY:
+        # Sprawdzamy filtr kategorii
+        if selected_cat_filter not in ["Wszystkie Metryki", "All Metrics"]:
+            cat_match = False
+            if "xG" in selected_cat_filter and cat_pl == "Bramki i xG": cat_match = True
+            elif "Szesnastka" in selected_cat_filter or "Box" in selected_cat_filter: cat_match = (cat_pl == "Strzały i Szesnastka")
+            elif "Podania" in selected_cat_filter or "Passing" in selected_cat_filter: cat_match = (cat_pl == "Dystrybucja i Podania")
+            elif "Obrona" in selected_cat_filter or "Defense" in selected_cat_filter: cat_match = (cat_pl == "Pojedynki i Obrona")
+            elif "Dyscyplina" in selected_cat_filter or "Discipline" in selected_cat_filter: cat_match = (cat_pl == "Dyscyplina i Inne")
+            if not cat_match:
+                continue
+
         if m_col in analyzed_sample.columns and season_col in team_season_row:
             val_sample = float(analyzed_sample[m_col].mean())
             val_season = float(team_season_row[season_col])
             delta = val_sample - val_season
             pct_delta = ((delta / val_season) * 100.0) if val_season > 0 else 0.0
 
+            lbl = lbl_en if selected_lang == "EN" else lbl_pl
+
+            if val_fmt == "pct":
+                s_val = f"{val_sample:.1f}%"
+                sea_val = f"{val_season:.1f}%"
+                d_val = f"{delta:+.1f}% ({pct_delta:+.0f}%)"
+            elif val_fmt == "int":
+                s_val = f"{val_sample:.1f}" if not is_single_fixture else f"{int(round(val_sample))}"
+                sea_val = f"{val_season:.2f}"
+                d_val = f"{delta:+.2f} ({pct_delta:+.0f}%)"
+            else:
+                s_val = f"{val_sample:.2f}"
+                sea_val = f"{val_season:.2f}"
+                d_val = f"{delta:+.2f} ({pct_delta:+.0f}%)"
+
             compare_rows.append({
-                "Metryka": lbl,
-                "Wynik w Próbce": f"{val_sample:.2f}",
-                "Średnia Sezonowa": f"{val_season:.2f}",
-                "Odchylenie (Delta)": f"{delta:+.2f} ({pct_delta:+.0f}%)"
+                "Metryka" if selected_lang == "PL" else "Metric": lbl,
+                "Wynik w Próbce" if selected_lang == "PL" else "Sample Value": s_val,
+                "Średnia Sezonowa" if selected_lang == "PL" else "Season Avg": sea_val,
+                "Odchylenie (Delta)" if selected_lang == "PL" else "Delta (Dev %)": d_val
             })
+
             chart_metrics.append(lbl)
             chart_sample_vals.append(val_sample)
             chart_season_vals.append(val_season)
 
-    col_tbl, col_plt = st.columns([1.1, 1.3])
+    col_tbl, col_plt = st.columns([1.15, 1.25])
+    
     with col_tbl:
-        st.dataframe(pd.DataFrame(compare_rows), use_container_width=True, hide_index=True)
+        df_comp_display = pd.DataFrame(compare_rows)
+        st.dataframe(df_comp_display, use_container_width=True, hide_index=True, height=max(450, min(800, len(compare_rows) * 35 + 40)))
 
     with col_plt:
+        # Dynamiczna wysokość wykresu dopasowana do liczby wybranych metryk
+        chart_height = max(450, min(800, len(chart_metrics) * 28 + 60))
+        
         fig_m_bar = go.Figure()
         fig_m_bar.add_trace(go.Bar(
             y=chart_metrics,
@@ -4477,11 +4578,11 @@ with tab_analiza_meczu:
         ))
         fig_m_bar.update_layout(
             barmode="group",
-            height=490,
+            height=chart_height,
             template="plotly_dark",
             paper_bgcolor="#0E1117",
             plot_bgcolor="#161B22",
-            margin=dict(l=140, r=40, t=30, b=30),
+            margin=dict(l=150, r=40, t=30, b=30),
             yaxis=dict(autorange="reversed"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5)
         )
