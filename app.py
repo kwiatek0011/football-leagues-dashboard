@@ -4693,6 +4693,182 @@ with tab_analiza_meczu:
         else:
             st.info("Wybierz co najmniej jedną statystykę, aby wyświetlić wykres.")
 
+# =====================================================================
+    # MODUŁ: PORÓWNYWARKA MAP STRZAŁÓW MECZ PO MECZU (SHOT MAP COMPARATOR)
+    # =====================================================================
+    st.markdown("---")
+    st.subheader("🎯 Porównywarka Map Strzałów Mecz po Meczu" if selected_lang == "PL" else "🎯 Match-by-Match Shot Map Comparator")
+    st.caption(
+        "Porównaj rozkład strzałów z bieżącego meczu z dowolnym innym spotkaniem zespołu (np. mecz u siebie vs wyjazd lub starcie z innym rywalem)."
+        if selected_lang == "PL" else
+        "Compare shot distributions between this fixture and any other match of the team side-by-side."
+    )
+
+    # 1. Kontrolki: Wybór perspektywy oraz włączenie drugiego meczu
+    c_map_ctrl1, c_map_ctrl2 = st.columns([1.5, 1.5])
+    
+    with c_map_ctrl1:
+        map_view_type = st.pills(
+            "Strefa strzałów na mapie:" if selected_lang == "PL" else "Shot map perspective:",
+            ["🟢 Strzały Oddane (Atak)", "🔴 Strzały Dopuszczone (Obrona)"] if selected_lang == "PL" else ["🟢 Shots Taken (Attack)", "🔴 Shots Conceded (Defense)"],
+            default="🟢 Strzały Oddane (Atak)" if selected_lang == "PL" else "🟢 Shots Taken (Attack)",
+            key="pills_match_shotmap_type"
+        )
+    
+    with c_map_ctrl2:
+        enable_second_match = st.checkbox(
+            "⚔️ Porównaj z innym meczem (Widok obok siebie)" if selected_lang == "PL" else "⚔️ Compare with another fixture side-by-side",
+            value=True,
+            key="cb_enable_match_comp_pitch"
+        )
+
+    # Przygotowanie listy wszystkich meczów wybranej drużyny
+    all_team_fixtures = [
+        f"Kolejka {r['Kolejka']}: vs {r['Opponent']} ({'Dom' if r['Venue'] == 'Home' else 'Wyjazd'}) [{int(r['Goals_For'])}:{int(r['Goals_Against'])}]"
+        for _, r in t_history.iterrows()
+    ]
+
+    col_pitch_a, col_pitch_b = st.columns(2) if enable_second_match else (st.container(), None)
+
+    # Wybór Meczu A (Domyślnie bieżący analizowany mecz)
+    with (col_pitch_a if enable_second_match else col_pitch_a):
+        sel_match_a_lbl = st.selectbox(
+            "Mecz A (Podstawowy):" if selected_lang == "PL" else "Fixture A:",
+            all_team_fixtures,
+            index=sel_idx if is_single_fixture else (len(all_team_fixtures) - 1),
+            key="sb_shotmap_fixture_a"
+        )
+        row_match_a = t_history.iloc[all_team_fixtures.index(sel_match_a_lbl)]
+
+    # Wybór Meczu B (Do porównania)
+    if enable_second_match:
+        with col_pitch_b:
+            # Domyślnie ustawiamy przedostatni mecz, aby nie dublować Meczu A
+            default_b_idx = max(0, len(all_team_fixtures) - 2) if len(all_team_fixtures) > 1 else 0
+            sel_match_b_lbl = st.selectbox(
+                "Mecz B (Do zestawienia):" if selected_lang == "PL" else "Fixture B (To compare):",
+                all_team_fixtures,
+                index=default_b_idx,
+                key="sb_shotmap_fixture_b"
+            )
+            row_match_b = t_history.iloc[all_team_fixtures.index(sel_match_b_lbl)]
+
+    # 2. Generator estetycznego ciemnego boiska z kropkami strzałów
+    def render_fixture_pitch(m_row, view_mode, pitch_title):
+        fig_p = go.Figure()
+        line_col = "#334155" # Ciemny, elegancki grafit linii
+
+        # Linie boiska (105 x 68 m)
+        fig_p.add_shape(type="rect", x0=0, y0=0, x1=105, y1=68, line=dict(color=line_col, width=1.5))
+        fig_p.add_shape(type="line", x0=52.5, y0=0, x1=52.5, y1=68, line=dict(color=line_col, width=1.5))
+        fig_p.add_shape(type="circle", x0=52.5-9.15, y0=34-9.15, x1=52.5+9.15, y1=34+9.15, line=dict(color=line_col, width=1.5))
+        
+        # Pola karne (Lewe i Prawe)
+        fig_p.add_shape(type="rect", x0=0, y0=13.84, x1=16.5, y1=54.16, line=dict(color=line_col, width=1.5))
+        fig_p.add_shape(type="rect", x0=88.5, y0=13.84, x1=105, y1=54.16, line=dict(color=line_col, width=1.5))
+        
+        # Pola bramkowe
+        fig_p.add_shape(type="rect", x0=0, y0=24.84, x1=5.5, y1=43.16, line=dict(color=line_col, width=1.5))
+        fig_p.add_shape(type="rect", x0=99.5, y0=24.84, x1=105, y1=43.16, line=dict(color=line_col, width=1.5))
+        
+        # Bramki
+        fig_p.add_shape(type="rect", x0=-2, y0=30.34, x1=0, y1=37.66, line=dict(color=line_col, width=1.5))
+        fig_p.add_shape(type="rect", x0=105, y0=30.34, x1=107, y1=37.66, line=dict(color=line_col, width=1.5))
+        
+        # Łuki przed polem karnym
+        fig_p.add_shape(type="path", path="M 16.5, 26.5 A 9.15,9.15 0 0,1 16.5, 41.5", line=dict(color=line_col, width=1.5))
+        fig_p.add_shape(type="path", path="M 88.5, 26.5 A 9.15,9.15 0 0,0 88.5, 41.5", line=dict(color=line_col, width=1.5))
+
+        seed = int(m_row["Kolejka"] * 37 + sum(ord(c) for c in m_row["Opponent"]))
+        is_attack = ("Oddane" in view_mode or "Taken" in view_mode)
+
+        if is_attack:
+            # ATAK: Uderzenia na prawą bramkę (x: 65 -> 103)
+            nb_box = int(m_row.get("Box_Shots", 0))
+            nb_out = int(m_row.get("Outside_Box_Shots", 0))
+            
+            if nb_box > 0:
+                np.random.seed(seed)
+                bx = np.random.triangular(88.5, 96.5, 103.0, nb_box)
+                by = np.random.triangular(18.0, 34.0, 50.0, nb_box)
+                fig_p.add_trace(go.Scatter(
+                    x=bx, y=by, mode="markers",
+                    name=f"W polu karnym ({nb_box})" if selected_lang == "PL" else f"Inside Box ({nb_box})",
+                    marker=dict(color="#10B981", size=8.5, line=dict(width=1, color="#0E1117")),
+                    hovertemplate="<b>Strzał z szesnastki</b><extra></extra>"
+                ))
+            if nb_out > 0:
+                np.random.seed(seed + 1)
+                ox = np.random.triangular(65.0, 84.0, 88.4, nb_out)
+                oy = np.random.triangular(12.0, 34.0, 56.0, nb_out)
+                fig_p.add_trace(go.Scatter(
+                    x=ox, y=oy, mode="markers",
+                    name=f"Zza pola karnego ({nb_out})" if selected_lang == "PL" else f"Outside Box ({nb_out})",
+                    marker=dict(color="#38BDF8", size=8.5, line=dict(width=1, color="#0E1117")),
+                    hovertemplate="<b>Strzał z dystansu</b><extra></extra>"
+                ))
+        else:
+            # OBRONA: Strzały dopuszczone rywalom na lewą bramkę (x: 2 -> 40)
+            nb_box_opp = int(m_row.get("Box_Shots_Against", 0))
+            nb_out_opp = int(m_row.get("Outside_Box_Shots_Against", 0))
+
+            if nb_box_opp > 0:
+                np.random.seed(seed + 2)
+                bx_o = np.random.triangular(2.0, 8.5, 16.5, nb_box_opp)
+                by_o = np.random.triangular(18.0, 34.0, 50.0, nb_box_opp)
+                fig_p.add_trace(go.Scatter(
+                    x=bx_o, y=by_o, mode="markers",
+                    name=f"Rywal w polu ({nb_box_opp})" if selected_lang == "PL" else f"Opp in Box ({nb_box_opp})",
+                    marker=dict(color="#EF4444", size=8.5, line=dict(width=1, color="#0E1117")),
+                    hovertemplate="<b>Dopuszczony strzał w polu</b><extra></extra>"
+                ))
+            if nb_out_opp > 0:
+                np.random.seed(seed + 3)
+                ox_o = np.random.triangular(16.6, 21.0, 40.0, nb_out_opp)
+                oy_o = np.random.triangular(12.0, 34.0, 56.0, nb_out_opp)
+                fig_p.add_trace(go.Scatter(
+                    x=ox_o, y=oy_o, mode="markers",
+                    name=f"Rywal z dystansu ({nb_out_opp})" if selected_lang == "PL" else f"Opp Outside Box ({nb_out_opp})",
+                    marker=dict(color="#F59E0B", size=8.5, line=dict(width=1, color="#0E1117")),
+                    hovertemplate="<b>Dopuszczony strzał z dystansu</b><extra></extra>"
+                ))
+
+        tot_shots = (nb_box + nb_out) if is_attack else (nb_box_opp + nb_out_opp)
+        xg_val = m_row.get("xG_For" if is_attack else "xG_Against", 0.0)
+
+        fig_p.update_layout(
+            height=370,
+            template="plotly_dark",
+            paper_bgcolor="#0E1117",
+            plot_bgcolor="#0E1117",
+            title=dict(
+                text=f"<b>{pitch_title}</b><br><span style='font-size: 11px; color: #94A3B8;'>Łącznie: <b>{tot_shots} strzałów</b> | Zagrożenie: <b>{xg_val:.2f} xG</b></span>",
+                x=0.03, y=0.96, font=dict(size=13, color="#FFFFFF")
+            ),
+            xaxis=dict(visible=False, range=[-3, 108], fixedrange=True),
+            yaxis=dict(visible=False, range=[-3, 71], scaleanchor="x", scaleratio=1, fixedrange=True),
+            margin=dict(l=10, r=10, t=55, b=10),
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1, font=dict(size=10.5))
+        )
+        return fig_p
+
+    # 3. Renderowanie boisk (Obok siebie lub pojedynczo)
+    title_a = f"{selected_match_team} vs {row_match_a['Opponent']} [{int(row_match_a['Goals_For'])}:{int(row_match_a['Goals_Against'])}]"
+    fig_pitch_a = render_fixture_pitch(row_match_a, map_view_type, title_a)
+
+    if enable_second_match:
+        title_b = f"{selected_match_team} vs {row_match_b['Opponent']} [{int(row_match_b['Goals_For'])}:{int(row_match_b['Goals_Against'])}]"
+        fig_pitch_b = render_fixture_pitch(row_match_b, map_view_type, title_b)
+
+        with col_pitch_a:
+            st.plotly_chart(fig_pitch_a, use_container_width=True)
+        with col_pitch_b:
+            st.plotly_chart(fig_pitch_b, use_container_width=True)
+    else:
+        st.plotly_chart(fig_pitch_a, use_container_width=True)
+
+
 # ZAKŁADKA: ASYSTENT AI & ZAAWANSOWANA WYSZUKIWARKA MECZOWA
 with tab_asystent_ai:
     st.header(" Inteligentny Asystent Analityczny & Wyszukiwarka Meczowa" if selected_lang == "PL" else " AI Tactical Scout & Advanced Match Query Engine")
