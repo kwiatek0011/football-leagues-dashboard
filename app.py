@@ -2777,12 +2777,29 @@ with tab_druzyny:
         fig_p.add_shape(type="path", path="M 88.5, 26.5 A 9.15,9.15 0 0,0 88.5, 41.5", line=dict(color=line_col, width=1.5))
 
         fig_p.update_layout(
-            height=330,
-            xaxis=dict(visible=False, range=[-3, 108], fixedrange=True),
-            yaxis=dict(visible=False, range=[-3, 71], scaleanchor="x", scaleratio=1, fixedrange=True),
-            plot_bgcolor="#0E1117", paper_bgcolor="#0E1117", margin=dict(l=10, r=10, t=30, b=10),
-            showlegend=True, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(color="#FFFFFF"))
+        height=330,
+        template="plotly_dark",
+        plot_bgcolor="#0E1117",
+        paper_bgcolor="#0E1117",
+        xaxis=dict(visible=False, range=[-3, 108], fixedrange=True),
+        yaxis=dict(
+            visible=False,
+            range=[-3, 71],
+            scaleanchor="x",
+            scaleratio=1,
+            fixedrange=True
+        ),
+        margin=dict(l=10, r=10, t=30, b=10),
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(color="#FFFFFF", size=10.5)
         )
+    )
         return fig_p
 
     fig_pitch = draw_dark_pitch()
