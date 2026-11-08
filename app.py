@@ -2463,7 +2463,10 @@ with tab_druzyny:
         "9. Corners: Won vs Conceded",
         "10. Passes & Build-up (Total / Own Half / Opp Half)",
         "11. Duels (Total / Ground / Aerial)",
-        "12. Form Tracker: 5-Match Rolling Avg (xG vs xGA)"
+        "12. Form Tracker: 5-Match Rolling Avg (xG vs xGA)",
+        "13. Total Shots: Team vs Conceded",
+        "14. Shots on Target: Team vs Conceded",
+        "15. Accurate Long Balls: Team vs Opponent",
     ]
     team_modules_pl = [
         "1. Bilans Bramek: Strzelone vs Stracone",
@@ -2477,7 +2480,10 @@ with tab_druzyny:
         "9. Rzuty Rożne (Corners): Wywalczone vs Dopuszczone",
         "10. Dystrybucja i Podania (Ogółem / Własna połowa / Połowa rywala)",
         "11. Pojedynki (Ogółem / Ziemia / Powietrze)",
-        "12. Trend Formy: 5-meczowa średnia krocząca (xG vs xGA)"
+        "12. Trend Formy: 5-meczowa średnia krocząca (xG vs xGA)",
+        "13. Strzały Ogółem: Własne vs Dopuszczone",
+        "14. Strzały Celne: Własne vs Dopuszczone",
+        "15. Celne Długie Piłki: Własne vs Rywala",
     ]
 
     team_view_category = st.selectbox(
@@ -2755,6 +2761,87 @@ with tab_druzyny:
         )
         st.plotly_chart(fig, use_container_width=True)
     
+    
+    # 13. Strzały Ogółem: Własne vs Dopuszczone
+    elif team_view_category in [team_modules_en[12], team_modules_pl[12]]:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=t_matches["Kolejka"], y=t_matches["Shots"], mode="lines+markers",
+            name=f"{selected_prof_team} (Własne)" if selected_lang == "PL" else f"{selected_prof_team} (Shots)",
+            line=dict(color="#10B981", width=2.5),
+            marker=dict(size=9, color="#10B981", line=dict(width=1, color="#FFFFFF")),
+            hovertemplate="<b>Kolejka %{x}</b><br>Rywal: " + t_matches["Opponent"] + " (" + t_matches["Venue"] + ")<br>Strzały własne: <b>%{y}</b><extra></extra>" if selected_lang == "PL" else "<b>Matchweek %{x}</b><br>Opponent: " + t_matches["Opponent"] + " (" + t_matches["Venue"] + ")<br>Shots: <b>%{y}</b><extra></extra>"
+        ))
+        fig.add_trace(go.Scatter(
+            x=t_matches["Kolejka"], y=t_matches["Shots_Against"], mode="lines+markers",
+            name="Rywal (Dopuszczone)" if selected_lang == "PL" else "Opponent (Conceded)",
+            line=dict(color="#EF4444", width=2.5),
+            marker=dict(size=9, color="#EF4444", line=dict(width=1, color="#FFFFFF")),
+            hovertemplate="<b>Kolejka %{x}</b><br>Rywal: " + t_matches["Opponent"] + " (" + t_matches["Venue"] + ")<br>Strzały rywala: <b>%{y}</b><extra></extra>" if selected_lang == "PL" else "<b>Matchweek %{x}</b><br>Opponent: " + t_matches["Opponent"] + " (" + t_matches["Venue"] + ")<br>Conceded shots: <b>%{y}</b><extra></extra>"
+        ))
+        max_s = max(t_matches["Shots"].max(), t_matches["Shots_Against"].max()) if len(t_matches) > 0 else 15
+        fig.update_layout(
+            height=430, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22",
+            title=dict(text=f"<b>{selected_prof_team} – Oddane Strzały Ogółem: Własne vs Dopuszczone</b>" if selected_lang == "PL" else f"<b>{selected_prof_team} – Total Shots: Team vs Conceded</b>", font=dict(size=16, color="#FFFFFF"), x=0.03, y=0.95),
+            xaxis=dict(title="Numer Kolejki" if selected_lang == "PL" else "Matchweek", dtick=1, showgrid=True, gridcolor="#30363D"),
+            yaxis=dict(title="Liczba Strzałów" if selected_lang == "PL" else "Total Shots", range=[0, max_s + 2], showgrid=True, gridcolor="#30363D"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # 14. Strzały Celne: Własne vs Dopuszczone
+    elif team_view_category in [team_modules_en[13], team_modules_pl[13]]:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=t_matches["Kolejka"], y=t_matches["Shots_On_Target"], mode="lines+markers",
+            name=f"{selected_prof_team} (Celne)" if selected_lang == "PL" else f"{selected_prof_team} (SoT)",
+            line=dict(color="#10B981", width=2.5),
+            marker=dict(size=9, color="#10B981", line=dict(width=1, color="#FFFFFF")),
+            hovertemplate="<b>Kolejka %{x}</b><br>Rywal: " + t_matches["Opponent"] + "<br>Celne własne: <b>%{y}</b><extra></extra>" if selected_lang == "PL" else "<b>Matchweek %{x}</b><br>Opponent: " + t_matches["Opponent"] + "<br>Shots on target: <b>%{y}</b><extra></extra>"
+        ))
+        fig.add_trace(go.Scatter(
+            x=t_matches["Kolejka"], y=t_matches["Shots_On_Target_Against"], mode="lines+markers",
+            name="Rywal (Celne dopuszczone)" if selected_lang == "PL" else "Opponent (SoT Conceded)",
+            line=dict(color="#EF4444", width=2.5),
+            marker=dict(size=9, color="#EF4444", line=dict(width=1, color="#FFFFFF")),
+            hovertemplate="<b>Kolejka %{x}</b><br>Rywal: " + t_matches["Opponent"] + "<br>Celne rywala: <b>%{y}</b><extra></extra>" if selected_lang == "PL" else "<b>Matchweek %{x}</b><br>Opponent: " + t_matches["Opponent"] + "<br>SoT Conceded: <b>%{y}</b><extra></extra>"
+        ))
+        max_sot = max(t_matches["Shots_On_Target"].max(), t_matches["Shots_On_Target_Against"].max()) if len(t_matches) > 0 else 8
+        fig.update_layout(
+            height=430, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22",
+            title=dict(text=f"<b>{selected_prof_team} – Strzały Celne (SoT): Własne vs Dopuszczone</b>" if selected_lang == "PL" else f"<b>{selected_prof_team} – Shots on Target: Team vs Conceded</b>", font=dict(size=16, color="#FFFFFF"), x=0.03, y=0.95),
+            xaxis=dict(title="Numer Kolejki" if selected_lang == "PL" else "Matchweek", dtick=1, showgrid=True, gridcolor="#30363D"),
+            yaxis=dict(title="Strzały Celne" if selected_lang == "PL" else "Shots on Target", range=[0, max_sot + 2], showgrid=True, gridcolor="#30363D"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    # 15. Celne Długie Piłki: Własne vs Rywala
+    elif team_view_category in [team_modules_en[14], team_modules_pl[14]]:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=t_matches["Kolejka"], y=t_matches["Long_Balls"], mode="lines+markers",
+            name=f"{selected_prof_team} (Własne)" if selected_lang == "PL" else f"{selected_prof_team} (Long Balls)",
+            line=dict(color="#10B981", width=2.5),
+            marker=dict(size=9, color="#10B981", line=dict(width=1, color="#FFFFFF")),
+            hovertemplate="<b>Kolejka %{x}</b><br>Rywal: " + t_matches["Opponent"] + "<br>Długie piłki własne: <b>%{y}</b><extra></extra>" if selected_lang == "PL" else "<b>Matchweek %{x}</b><br>Opponent: " + t_matches["Opponent"] + "<br>Long balls: <b>%{y}</b><extra></extra>"
+        ))
+        fig.add_trace(go.Scatter(
+            x=t_matches["Kolejka"], y=t_matches["Long_Balls_Against"], mode="lines+markers",
+            name="Rywal" if selected_lang == "PL" else "Opponent",
+            line=dict(color="#EF4444", width=2.5),
+            marker=dict(size=9, color="#EF4444", line=dict(width=1, color="#FFFFFF")),
+            hovertemplate="<b>Kolejka %{x}</b><br>Rywal: " + t_matches["Opponent"] + "<br>Długie piłki rywala: <b>%{y}</b><extra></extra>" if selected_lang == "PL" else "<b>Matchweek %{x}</b><br>Opponent: " + t_matches["Opponent"] + "<br>Opponent long balls: <b>%{y}</b><extra></extra>"
+        ))
+        max_lb = max(t_matches["Long_Balls"].max(), t_matches["Long_Balls_Against"].max()) if len(t_matches) > 0 else 30
+        fig.update_layout(
+            height=430, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22",
+            title=dict(text=f"<b>{selected_prof_team} – Celne Długie Piłki: Własne vs Rywala</b>" if selected_lang == "PL" else f"<b>{selected_prof_team} – Accurate Long Balls: Team vs Opponent</b>", font=dict(size=16, color="#FFFFFF"), x=0.03, y=0.95),
+            xaxis=dict(title="Numer Kolejki" if selected_lang == "PL" else "Matchweek", dtick=1, showgrid=True, gridcolor="#30363D"),
+            yaxis=dict(title="Liczba Długich Podań" if selected_lang == "PL" else "Accurate Long Balls", range=[0, max_lb + 4], showgrid=True, gridcolor="#30363D"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig, use_container_width=True)
     
     # Raport kafelkowy (mini-tabele)
     st.markdown("---")
