@@ -52,6 +52,7 @@ TRANSLATIONS = {
         "att_opt18": "Efektywność w szesnastce: Kontakty vs Strzały",
         "att_opt19": "Strzały potrzebne na gola",
         "att_opt20": "xGOT vs Bramki zdobyte (Over/Underperformance)",
+        "att_opt21": "Oddane strzały ogółem (Total Shots)",
         "def_select": "🛡️ Wybierz moduł analizy defensywnej:",
     "def_opt1": "Tabela Główna Defensywy",
     "def_opt2": "1. Ogólne xGA na mecz (Dopuszczona jakość szans)",
@@ -137,6 +138,7 @@ TRANSLATIONS = {
         "att_opt18": "Box Efficiency: Touches vs Shots",
         "att_opt19": "Shots Needed per Goal",
         "att_opt20": "xGOT vs Real Goals Scored",
+        "att_opt21": "Total Shots per Match",
         "def_select": "🛡️ Select defensive analysis module:",
     "def_opt1": "Main Defensive Table",
     "def_opt2": "1. Total Expected Goals Against (xGA / 90)",
@@ -1450,7 +1452,7 @@ with tab_ogolne:
 with tab_ofensywa:
     ofensywa_widok = st.selectbox(
         t("att_select"),
-        [t(f"att_opt{i}") for i in range(1, 21)]
+        [t(f"att_opt{i}") for i in range(1, 22)]
     )
     st.markdown("---")
 
@@ -1558,6 +1560,35 @@ with tab_ofensywa:
         matches_df_temp["Delta_xG_Match"] = (matches_df_temp["Goals_For"] - matches_df_temp["xG_For"]).round(2)
         render_metric_trend_chart(matches_df_temp, team_stats, "Delta_xG_Match", "Gole_na_mecz", "Gole - xG (Delta meczowa)", "Delta")
 
+    # 21. Total Shots
+    elif ofensywa_widok == t("att_opt21"):
+        st.subheader("Total Shots per Match" if selected_lang == "EN" else "Oddane strzały ogółem (Średnia / Mecz)")
+        st.caption(
+            "Ranking of teams taking the highest volume of shots per 90 minutes along with match-by-match trajectory."
+            if selected_lang == "EN" else
+            "Zestawienie drużyn generujących największy wolumen strzałów na mecz wraz z analizą trendu w poszczególnych kolejkach."
+        )
+        
+        render_metric_bar_and_paper(
+            df=team_stats, 
+            col_name="Strzaly_na_mecz", 
+            title_chart="Total Shots per Match Rankings",
+            title_paper="Total Shots Rankings", 
+            value_header="Shots / 90" if selected_lang == "EN" else "Strzały / 90", 
+            color_scale="Blues", 
+            sort_asc=False
+        )
+        
+        render_metric_trend_chart(
+            matches_df=matches_df, 
+            team_stats=team_stats, 
+            match_col="Shots", 
+            avg_col="Strzaly_na_mecz", 
+            metric_label="Oddane Strzały" if selected_lang == "PL" else "Total Shots", 
+            yaxis_title="Strzały" if selected_lang == "PL" else "Shots"
+        )
+    
+    
     # 11. Box Shots
     elif ofensywa_widok == t("att_opt11"):
         st.subheader("Shots Inside Box" if selected_lang == "EN" else "Obecność w szesnastce: Średnia strzałów z pola karnego")
