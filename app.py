@@ -866,66 +866,175 @@ def compute_custom_table(matches_subset, is_xg=False):
     components.html(html_code, height=720, scrolling=False)
 
 def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_header, color_scale="Greens", sort_asc=False):
-    """Tworzy zsynchronizowany widok 2-kolumnowy. Napis i filtr Top 20 pojawia się TYLKO dla Top 5 lig."""
+    """Tworzy zsynchronizowany widok 2-kolumnowy z automatycznym przełącznikiem Średnia / Suma (dla metryk nieprocentowych)."""
     lang = st.session_state.get("selected_lang", "PL")
-    
-    # Sprawdzamy czy użytkownik analizuje połączoną bazę Top 5 lig (ok. 100 drużyn)
     is_top5 = (current_league.get("file") == "TOP5")
     
-    if is_top5:
+    # 1. Wykrywanie czy metryka jest wskaźnikiem procentowym / ilorazowym (dla nich sumowanie nie ma sensu)
+    is_non_summable = (
+        "%" in value_header 
+        or "proc" in col_name.lower() 
+        or "posiadanie" in col_name.lower() 
+        or "possession" in col_name.lower()
+        or "na_gola" in col_name.lower() 
+        or "na_strzal" in col_name.lower()
+        or "/ goal" in value_header.lower()
+        or "/ shot" in value_header.lower()
+        or "gole - xg" in value_header.lower()
+        or "goals - xg" in value_header.lower()
+        or "gole - xga" in value_header.lower()
+        or "prevented" in value_header.lower()
+    )
+
+    # 2. Kontrolki nad wykresem: Przełącznik Top 20 (dla Top 5 lig) oraz Pigułki: Średnia / Suma
+    if is_top5 and not is_non_summable:
+        col_scope_ui, col_agg_ui = st.columns([1.2, 1.8])
+        with col_scope_ui:
+            scope_opts = ["Top 20", "Pełna Lista (Wszystkie zespoły)"] if lang == "PL" else ["Top 20", "Full List (All Teams)"]
+            selected_scope = st.radio(
+                "Zakres rankingu:" if lang == "PL" else "Ranking Scope:",
+                scope_opts, index=0, horizontal=True, key=f"scope_radio_{col_name}"
+            )
+        with col_agg_ui:
+            agg_opts = [" Średnia (Na mecz)", " Suma (Cały sezon)"] if lang == "PL" else [" Average (Per 90)", " Total (Full Season)"]
+            selected_agg = st.pills(
+                "Tryb wartości:" if lang == "PL" else "Value mode:",
+                agg_opts, default=agg_opts[0], key=f"agg_pill_{col_name}"
+            )
+        show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
+        is_sum = bool(selected_agg and ("Suma" in selected_agg or "Total" in selected_agg))
+
+    elif is_top5 and is_non_summable:
         scope_opts = ["Top 20", "Pełna Lista (Wszystkie zespoły)"] if lang == "PL" else ["Top 20", "Full List (All Teams)"]
         selected_scope = st.radio(
             "Zakres rankingu:" if lang == "PL" else "Ranking Scope:",
-            scope_opts,
-            index=0,
-            horizontal=True,
-            key=f"scope_radio_{col_name}"
+            scope_opts, index=0, horizontal=True, key=f"scope_radio_{col_name}"
         )
         show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
-        title_suffix = f" ({len(df)})" if show_all else " (Top 20)"
+        is_sum = False
+
+    elif not is_top5 and not is_non_summable:
+        show_all = True
+        agg_opts = [" Średnia (Na mecz)", " Suma (Cały sezon)"] if lang == "PL" else [" Average (Per 90)", " Total (Full Season)"]
+        selected_agg = st.pills(
+            "Tryb wartości:" if lang == "PL" else "Value mode:",
+            agg_opts, default=agg_opts[0], key=f"agg_pill_{col_name}"
+        )
+        is_sum = bool(selected_agg and ("Suma" in selected_agg or "Total" in selected_agg))
+
     else:
         show_all = True
-        title_suffix = ""  # Żadnego dopisku (Top 20) dla pojedynczej ligi!
+        is_sum = False
 
-    # Sortowanie danych
-    full_sorted_df = df.sort_values(by=col_name, ascending=sort_asc).copy().reset_index(drop=True)
-    avg_val = full_sorted_df[col_name].mean()
-    
-    # Wybór wierszy do wyświetlenia
+    title_suffix = f" ({len(df)})" if (is_top5 and show_all) else (" (Top 20)" if is_top5 else "")
+
+    # 3. Przygotowanie danych (Wybór kolumny: Średnia vs Suma)
+    work_df = df.copy()
+    active_col = col_name
+    active_value_header = value_header
+    active_title_chart = title_chart
+    active_title_paper = title_paper
+
+    if is_sum:
+        # Słownik predefiniowanych sum z bazy danych
+        special_sum_map = {
+            "Strzaly_na_mecz": "Shots_Sum",
+            "Celne_strzaly": "Shots_On_Target_Sum",
+            "Shots_Off_Target_Mean": "Shots_Off_Target_Sum",
+            "Blocked_Shots_Mean": "Blocked_Shots_Sum",
+            "Big_Chances": "Big_Chances_Suma",
+            "Big_Chances_Missed": "Big_Chances_Missed_Suma",
+            "Gole_na_mecz": "Gole_Strzelone",
+            "Gole_stracone_na_mecz": "Gole_Stracone",
+            "xG_na_mecz": "xG_Suma",
+            "xGA_na_mecz": "xGA_Suma",
+            "xGOT_na_mecz": "xGOT_Suma",
+            "Passes_Total": "Passes_Total_Sum",
+            "Podania_ogolem": "Passes_Total_Sum",
+            "Passes_Own_Half_Mean": "Passes_Own_Half_Sum",
+            "Passes_Opp_Half_Mean": "Passes_Opp_Half_Sum",
+            "Long_Balls_Mean": "Long_Balls_Sum",
+            "Accurate_Crosses_Mean": "Accurate_Crosses_Sum",
+            "Keeper_Saves_Mean": "Keeper_Saves_Sum",
+        }
+
+        sum_candidates = [
+            col_name.replace("_na_mecz", "_Suma"),
+            col_name.replace("_na_mecz", "_Sum"),
+            col_name.replace("_Mean", "_Sum"),
+            col_name.replace("_Mean", "_Suma"),
+            col_name + "_Suma",
+            col_name + "_Sum"
+        ]
+
+        if col_name in special_sum_map and special_sum_map[col_name] in work_df.columns:
+            active_col = special_sum_map[col_name]
+        else:
+            found = False
+            for cand in sum_candidates:
+                if cand in work_df.columns:
+                    active_col = cand
+                    found = True
+                    break
+            if not found:
+                # W przypadku braku dedykowanej kolumny sumy wyliczamy iloczyn średniej i meczów
+                active_col = f"{col_name}_calc_sum"
+                work_df[active_col] = (work_df[col_name] * work_df["Mecze"]).round(2)
+
+        # Dynamiczna aktualizacja etykiet i nagłówków
+        if lang == "PL":
+            clean_head = value_header.replace("/ 90", "").replace("/ mecz", "").replace("/mecz", "").replace("/90", "").strip()
+            active_value_header = f"Suma {clean_head}"
+            active_title_chart = title_chart.replace("Rankings", "Suma").replace("Ranking", "Suma") + " (Suma Sezonowa)"
+            active_title_paper = title_paper.replace("Rankings", "Suma") + " (Suma)"
+        else:
+            clean_head = value_header.replace("/ 90", "").replace("/ match", "").replace("/match", "").replace("/90", "").strip()
+            active_value_header = f"Total {clean_head}"
+            active_title_chart = title_chart + " (Season Total)"
+            active_title_paper = title_paper + " (Total)"
+
+    # 4. Sortowanie danych po aktywnej kolumnie (Średniej lub Sumie)
+    full_sorted_df = work_df.sort_values(by=active_col, ascending=sort_asc).copy().reset_index(drop=True)
+    avg_val = full_sorted_df[active_col].mean()
     sorted_df = full_sorted_df if show_all else full_sorted_df.head(20)
 
-    # 1. Wykres słupkowy
+    # 5. Wykres słupkowy
+    is_int_stat = any(k in active_value_header.lower() for k in ["strzał", "shot", "szans", "chance", "podan", "pass", "długie", "long", "odbiór", "tackle", "faule", "foul", "gole", "goals"])
+
     fig = go.Figure()
     fig.add_trace(go.Bar(
-        x=sorted_df[col_name],
+        x=sorted_df[active_col],
         y=sorted_df["Team"],
         orientation='h',
         text=[
-            f"{v:+.2f}" if ("Gole - xG" in value_header or "Gole - xGA" in value_header or "Goals - xG" in value_header)
-            else (f"{v:.3f}" if ("strzał" in value_header.lower() or "shot" in value_header.lower()) else f"{v:.2f}")
-            for v in sorted_df[col_name]
+            f"{v:+.2f}" if ("Gole - xG" in active_value_header or "Goals - xG" in active_value_header)
+            else (f"{v:.3f}" if ("xg / strzał" in active_value_header.lower() or "xg / shot" in active_value_header.lower())
+            else (f"{int(round(v))}" if (is_sum and is_int_stat)
+            else f"{v:.2f}"))
+            for v in sorted_df[active_col]
         ],
         textposition="outside",
         textfont=dict(size=10.5, color="#1E293B"),
         marker=dict(
-            color=sorted_df[col_name],
+            color=sorted_df[active_col],
             colorscale=color_scale,
             showscale=False,
             line=dict(color="#0F172A", width=0.5)
         ),
-        hovertemplate="<b>%{y}</b><br>" + f"{value_header}: " + "%{x:.2f}<extra></extra>"
+        hovertemplate="<b>%{y}</b><br>" + f"{active_value_header}: " + ("%{x:.0f}" if (is_sum and is_int_stat) else "%{x:.2f}") + "<extra></extra>"
     ))
-    
+
+    # Pionowa linia średniej (dopasowuje się do średniej sumy lub średniej na mecz)
+    line_annot = (f"Śr. ligowa suma: {avg_val:.1f}" if lang == "PL" else f"League Avg Total: {avg_val:.1f}") if is_sum else f"Średnia / Avg: {avg_val:.2f}"
     fig.add_vline(
         x=avg_val, line_dash="dash", line_color="#475569", line_width=1.2,
-        annotation_text=f"Średnia / Avg: {avg_val:.2f}", 
+        annotation_text=line_annot, 
         annotation_position="bottom right" if avg_val >= 0 else "bottom left",
         annotation_font=dict(size=10, color="#475569")
     )
-    
-    x_min, x_max = sorted_df[col_name].min(), sorted_df[col_name].max()
+
+    x_min, x_max = sorted_df[active_col].min(), sorted_df[active_col].max()
     x_range = [x_min * 1.3 if x_min < 0 else 0, x_max * 1.25 if x_max > 0 else 0]
-    
     plot_height = 620 if not (is_top5 and show_all) else max(620, len(sorted_df) * 26)
 
     fig.update_layout(
@@ -934,14 +1043,14 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#F8FAFC",
         title=dict(
-            text=f"<b>{title_chart}</b>{title_suffix}",
+            text=f"<b>{active_title_chart}</b>{title_suffix}",
             x=0.04,
             y=0.98 if show_all else 0.96,
             font=dict(size=16, color="#0F172A")
         ),
         xaxis=dict(
             title=dict(
-                text=f"<b>{value_header}</b>",
+                text=f"<b>{active_value_header}</b>",
                 font=dict(size=13, color="#0F172A")
             ),
             tickfont=dict(size=11, color="#0F172A", family="Arial Black, sans-serif"),
@@ -960,18 +1069,21 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
         ),
         margin=dict(l=120, r=40, t=50, b=50)
     )
-    
-    # 2. Generowanie ciemnej tabeli HTML z paskiem przewijania
+
+    # 6. Tabela raportowa HTML po prawej stronie
     rows_html = ""
     for idx, row in sorted_df.iterrows():
         rank = idx + 1
         team = row["Team"]
-        val = row[col_name]
+        val = row[active_col]
         matches = int(row["Mecze"]) if "Mecze" in row else len(sorted_df)
         
-        if "Gole - xG" in value_header or "Goals - xG" in value_header:
+        if "Gole - xG" in active_value_header or "Goals - xG" in active_value_header:
             val_str = f"{val:+.2f}"
             val_color = "#10B981" if val > 0 else ("#EF4444" if val < 0 else "#FFFFFF")
+        elif is_sum and is_int_stat:
+            val_str = f"{int(round(val))}"
+            val_color = "#FFFFFF"
         else:
             val_str = f"{val:.2f}"
             val_color = "#FFFFFF"
@@ -990,14 +1102,14 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
 
     table_html = f"""
     <div style="background-color: #1a1d21; border: 1px solid #2d333b; border-radius: 6px; padding: 14px 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-height: {plot_height - 20}px; overflow-y: auto;">
-        <div style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 8px;">{title_paper}</div>
+        <div style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 8px;">{active_title_paper}</div>
         <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.2;">
             <thead>
                 <tr style="border-bottom: 2px solid #3b434e; color: #94A3B8; font-size: 11.5px; height: 26px;">
                     <th style="width: 28px; text-align: left;">#</th>
                     <th style="text-align: left;">{th_bar_team}</th>
                     <th style="width: 35px; text-align: center;">{th_bar_m}</th>
-                    <th style="width: 65px; text-align: right;">{value_header}</th>
+                    <th style="width: 65px; text-align: right;">{active_value_header}</th>
                 </tr>
             </thead>
             <tbody>
@@ -1006,7 +1118,7 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
         </table>
     </div>
     """
-    
+
     col_l, col_r = st.columns([1.35, 1])
     with col_l:
         st.plotly_chart(fig, use_container_width=True)
@@ -1560,33 +1672,7 @@ with tab_ofensywa:
         matches_df_temp["Delta_xG_Match"] = (matches_df_temp["Goals_For"] - matches_df_temp["xG_For"]).round(2)
         render_metric_trend_chart(matches_df_temp, team_stats, "Delta_xG_Match", "Gole_na_mecz", "Gole - xG (Delta meczowa)", "Delta")
 
-    # 21. Total Shots
-    elif ofensywa_widok == t("att_opt21"):
-        st.subheader("Total Shots per Match" if selected_lang == "EN" else "Oddane strzały ogółem (Średnia / Mecz)")
-        st.caption(
-            "Ranking of teams taking the highest volume of shots per 90 minutes along with match-by-match trajectory."
-            if selected_lang == "EN" else
-            "Zestawienie drużyn generujących największy wolumen strzałów na mecz wraz z analizą trendu w poszczególnych kolejkach."
-        )
-        
-        render_metric_bar_and_paper(
-            df=team_stats, 
-            col_name="Strzaly_na_mecz", 
-            title_chart="Total Shots per Match Rankings",
-            title_paper="Total Shots Rankings", 
-            value_header="Shots / 90" if selected_lang == "EN" else "Strzały / 90", 
-            color_scale="Blues", 
-            sort_asc=False
-        )
-        
-        render_metric_trend_chart(
-            matches_df=matches_df, 
-            team_stats=team_stats, 
-            match_col="Shots", 
-            avg_col="Strzaly_na_mecz", 
-            metric_label="Oddane Strzały" if selected_lang == "PL" else "Total Shots", 
-            yaxis_title="Strzały" if selected_lang == "PL" else "Shots"
-        )
+    
     
     
     # 11. Box Shots
@@ -1728,6 +1814,34 @@ with tab_ofensywa:
         fig_xgot.update_traces(textposition="top center", marker=dict(size=12, color="#AF7AC5"))
         st.plotly_chart(fig_xgot, use_container_width=True)
         render_metric_trend_chart(matches_df, team_stats, "Goals_For", "Gole_na_mecz", "Bramki Zdobyte", "Gole")
+
+    # 21. Total Shots
+    elif ofensywa_widok == t("att_opt21"):
+        st.subheader("Total Shots per Match" if selected_lang == "EN" else "Oddane strzały ogółem (Średnia / Mecz)")
+        st.caption(
+            "Ranking of teams taking the highest volume of shots per 90 minutes along with match-by-match trajectory."
+            if selected_lang == "EN" else
+            "Zestawienie drużyn generujących największy wolumen strzałów na mecz wraz z analizą trendu w poszczególnych kolejkach."
+        )
+        
+        render_metric_bar_and_paper(
+            df=team_stats, 
+            col_name="Strzaly_na_mecz", 
+            title_chart="Total Shots per Match Rankings",
+            title_paper="Total Shots Rankings", 
+            value_header="Shots / 90" if selected_lang == "EN" else "Strzały / 90", 
+            color_scale="Blues", 
+            sort_asc=False
+        )
+        
+        render_metric_trend_chart(
+            matches_df=matches_df, 
+            team_stats=team_stats, 
+            match_col="Shots", 
+            avg_col="Strzaly_na_mecz", 
+            metric_label="Oddane Strzały" if selected_lang == "PL" else "Total Shots", 
+            yaxis_title="Strzały" if selected_lang == "PL" else "Shots"
+        )    
 
 # =========================================================================
 # TAB 3: STATYSTYKI DEFENSYWNE (PL / EN)
