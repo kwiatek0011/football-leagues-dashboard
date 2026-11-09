@@ -2555,6 +2555,7 @@ with tab_druzyny:
         "13. Total Shots: Team vs Conceded",
         "14. Shots on Target: Team vs Conceded",
         "15. Accurate Long Balls: Team vs Opponent",
+        "16. Ball Possession (%): Team vs Opponent",
     ]
     team_modules_pl = [
         "1. Bilans Bramek: Strzelone vs Stracone",
@@ -2572,6 +2573,7 @@ with tab_druzyny:
         "13. Strzały Ogółem: Własne vs Dopuszczone",
         "14. Strzały Celne: Własne vs Dopuszczone",
         "15. Celne Długie Piłki: Własne vs Rywala",
+        "16. Posiadanie Piłki (%): Własne vs Rywala",
     ]
 
     team_view_category = st.selectbox(
@@ -2927,6 +2929,43 @@ with tab_druzyny:
             title=dict(text=f"<b>{selected_prof_team} – Celne Długie Piłki: Własne vs Rywala</b>" if selected_lang == "PL" else f"<b>{selected_prof_team} – Accurate Long Balls: Team vs Opponent</b>", font=dict(size=16, color="#FFFFFF"), x=0.03, y=0.95),
             xaxis=dict(title="Numer Kolejki" if selected_lang == "PL" else "Matchweek", dtick=1, showgrid=True, gridcolor="#30363D"),
             yaxis=dict(title="Liczba Długich Podań" if selected_lang == "PL" else "Accurate Long Balls", range=[0, max_lb + 4], showgrid=True, gridcolor="#30363D"),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    
+    # 16. Posiadanie Piłki (%): Własne vs Rywala
+    elif team_view_category in [team_modules_en[15], team_modules_pl[15]]:
+        opp_poss = 100.0 - t_matches["Possession"]
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=t_matches["Kolejka"], y=t_matches["Possession"], mode="lines+markers",
+            name=f"{selected_prof_team} (Własne)" if selected_lang == "PL" else f"{selected_prof_team} (Team)",
+            line=dict(color="#10B981", width=2.5),
+            marker=dict(size=9, color="#10B981", line=dict(width=1, color="#FFFFFF")),
+            hovertemplate="<b>Kolejka %{x}</b><br>Rywal: " + t_matches["Opponent"] + " (" + t_matches["Venue"] + ")<br>Posiadanie: <b>%{y:.1f}%</b><extra></extra>" if selected_lang == "PL" else "<b>Matchweek %{x}</b><br>Opponent: " + t_matches["Opponent"] + " (" + t_matches["Venue"] + ")<br>Possession: <b>%{y:.1f}%</b><extra></extra>"
+        ))
+        fig.add_trace(go.Scatter(
+            x=t_matches["Kolejka"], y=opp_poss, mode="lines+markers",
+            name="Rywal" if selected_lang == "PL" else "Opponent",
+            line=dict(color="#EF4444", width=2.5),
+            marker=dict(size=9, color="#EF4444", line=dict(width=1, color="#FFFFFF")),
+            hovertemplate="<b>Kolejka %{x}</b><br>Rywal: " + t_matches["Opponent"] + "<br>Posiadanie rywala: <b>%{y:.1f}%</b><extra></extra>" if selected_lang == "PL" else "<b>Matchweek %{x}</b><br>Opponent: " + t_matches["Opponent"] + "<br>Opponent possession: <b>%{y:.1f}%</b><extra></extra>"
+        ))
+        fig.add_hline(
+            y=50.0, line_dash="dash", line_color="#64748B", line_width=1.2,
+            annotation_text="50% (Równowaga / Parity)",
+            annotation_position="bottom right",
+            annotation_font=dict(size=10, color="#94A3B8")
+        )
+        fig.update_layout(
+            height=430, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22",
+            title=dict(
+                text=f"<b>{selected_prof_team} – Posiadanie Piłki (%): Własne vs Rywala</b>" if selected_lang == "PL" else f"<b>{selected_prof_team} – Ball Possession (%): Team vs Opponent</b>",
+                font=dict(size=16, color="#FFFFFF"), x=0.03, y=0.95
+            ),
+            xaxis=dict(title="Numer Kolejki" if selected_lang == "PL" else "Matchweek", dtick=1, showgrid=True, gridcolor="#30363D"),
+            yaxis=dict(title="Posiadanie Piłki (%)" if selected_lang == "PL" else "Ball Possession (%)", range=[0, 100], ticksuffix="%", showgrid=True, gridcolor="#30363D"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
         )
         st.plotly_chart(fig, use_container_width=True)
