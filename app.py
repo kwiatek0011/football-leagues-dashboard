@@ -4994,12 +4994,14 @@ with tab_analiza_meczu:
                 s_delta = f"{delta:+.2f} ({pct_delta:+.0f}%)"
 
             col_target_header = opp_name if is_vs_opponent else ("Norma Sezonowa" if selected_lang == "PL" else "Season Avg")
+            col_metric_header = "Metryka" if selected_lang == "PL" else "Metric"
+            col_delta_header = "Różnica (Delta)" if selected_lang == "PL" else "Difference (Delta)"
             
             compare_table.append({
-                "Metryka": lbl,
+                col_metric_header: lbl,
                 selected_match_team: s_main,
                 col_target_header: s_target,
-                "Różnica (Delta)": s_delta
+                col_delta_header: s_delta
             })
             c_labels.append(lbl)
             c_vals_main.append(v_main)
