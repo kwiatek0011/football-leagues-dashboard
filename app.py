@@ -1565,14 +1565,14 @@ with tab_ogolne:
 
     # 4. Widok: Tabela Różnicy xG (xG Difference: xG - xGA)
     elif ogolne_widok == t("gen_opt4"):
-        st.subheader("⚖️ Tabela Bilansu Zagrożenia (xG Difference: xG - xGA)" if selected_lang == "PL" else "⚖️ Expected Goals Differential Standings (xGD)")
+        st.subheader("⚖️ Tabela Bilansu Zagrożenia (xGD)" if selected_lang == "PL" else "⚖️ Expected Goals Differential Standings (xGD)")
         st.caption(
-            "Ranking zespołów uszeregowany według czystej przewagi tworzonego zagrożenia (xG) nad dopuszczonym (xGA). Dodatnie wartości oznaczają dominację nad rywalami."
+            "Ranking zespołów uszeregowany według czystej różnicy wykreowanego zagrożenia (xG) i dopuszczonego (xGA)."
             if selected_lang == "PL" else
-            "League standings sorted by net expected goal differential (xG - xGA). Positive values indicate sustained match dominance."
+            "League standings ranked by net expected goal differential (xGD = xG - xGA)."
         )
 
-        # Obsługa widoku Top 20 vs Całość dla scalonej bazy Top 5 lig
+        # Obsługa przełącznika Top 20 vs Całość dla scalonej bazy Top 5 lig
         is_top5_selected = (current_league["file"] == "TOP5")
         if is_top5_selected:
             scope_opts = ["Top 20", "Pełna Tabela (Wszystkie zespoły)"] if selected_lang == "PL" else ["Top 20", "Full Standings (All Teams)"]
@@ -1585,43 +1585,65 @@ with tab_ogolne:
             show_all = True
 
         # Sortowanie po różnicy xG na mecz (malejąco)
-        xgd_df = team_stats.sort_values(by="Bilans_xG", ascending=False).copy().reset_index(drop=True)
-        xgd_df.index = xgd_df.index + 1
-        xgd_df = xgd_df.reset_index().rename(columns={"index": "#"})
+        xgd_sorted_full = team_stats.sort_values(by="Bilans_xG", ascending=False).copy().reset_index(drop=True)
+        xgd_df = xgd_sorted_full if show_all else xgd_sorted_full.head(20)
 
-        if not show_all:
-            xgd_df = xgd_df.head(20)
+        # Generowanie wierszy w stylu ciemnej karty raportowej
+        rows_xgd_html = ""
+        for idx, row in xgd_df.iterrows():
+            rank = idx + 1
+            team = row["Team"]
+            mp = int(row["Mecze"]) if "Mecze" in row else len(xgd_df)
+            xg_val = float(row["xG_na_mecz"])
+            xga_val = float(row["xGA_na_mecz"])
+            xgd_val = float(row["Bilans_xG"])
 
-        # Zestaw wybranych kolumn
-        xgd_cols = [
-            "#", "Team", "Mecze", 
-            "xG_na_mecz", "xGA_na_mecz", "Bilans_xG",
-            "xG_Suma", "xGA_Suma", "Bilans_xG_Suma",
-            "Bilans_Bramkowy", "Punkty"
-        ]
+            # Kolorowanie delty: zielony dla dominatorów, czerwony dla deficytu
+            diff_color = "#10B981" if xgd_val > 0 else ("#EF4444" if xgd_val < 0 else "#CBD5E1")
+            diff_str = f"{xgd_val:+.2f}"
 
-        # Konfiguracja formatowania kolumn tabeli
-        xgd_col_config = {
-            "#": st.column_config.NumberColumn("#", width="small"),
-            "Team": st.column_config.TextColumn("Drużyna" if selected_lang == "PL" else "Team", width="medium"),
-            "Mecze": st.column_config.NumberColumn("M" if selected_lang == "PL" else "MP", width="small"),
-            "xG_na_mecz": st.column_config.NumberColumn("xG / mecz" if selected_lang == "PL" else "xG / 90", format="%.2f"),
-            "xGA_na_mecz": st.column_config.NumberColumn("xGA / mecz" if selected_lang == "PL" else "xGA / 90", format="%.2f"),
-            "Bilans_xG": st.column_config.NumberColumn("Bilans xG / mecz" if selected_lang == "PL" else "xGD / 90", format="%+.2f"),
-            "xG_Suma": st.column_config.NumberColumn("xG Suma" if selected_lang == "PL" else "Total xG", format="%.2f"),
-            "xGA_Suma": st.column_config.NumberColumn("xGA Suma" if selected_lang == "PL" else "Total xGA", format="%.2f"),
-            "Bilans_xG_Suma": st.column_config.NumberColumn("Bilans xG Suma" if selected_lang == "PL" else "Total xGD", format="%+.2f"),
-            "Bilans_Bramkowy": st.column_config.NumberColumn("Realny Bilans" if selected_lang == "PL" else "Goal Diff", format="%+d"),
-            "Punkty": st.column_config.NumberColumn("Pkt" if selected_lang == "PL" else "Pts", width="small")
-        }
+            rows_xgd_html += f"""
+            <tr style="height: 29px; border-bottom: 1px solid #21262D;">
+                <td style="font-weight: 700; color: #FFFFFF; text-align: left; width: 38px; padding: 4px 8px;">{rank}</td>
+                <td style="font-weight: 600; color: #E2E8F0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 4px 8px;">{team}</td>
+                <td style="color: #94A3B8; text-align: center; width: 55px; padding: 4px 8px;">{mp}</td>
+                <td style="color: #38BDF8; font-weight: 600; text-align: center; width: 85px; padding: 4px 8px;">{xg_val:.2f}</td>
+                <td style="color: #F59E0B; font-weight: 600; text-align: center; width: 85px; padding: 4px 8px;">{xga_val:.2f}</td>
+                <td style="font-weight: 700; color: {diff_color}; text-align: right; width: 95px; padding: 4px 8px;">{diff_str}</td>
+            </tr>
+            """
 
-        st.dataframe(
-            xgd_df[xgd_cols],
-            use_container_width=True,
-            hide_index=True,
-            column_config=xgd_col_config,
-            height=max(450, min(800, len(xgd_df) * 35 + 40))
-        )    
+        th_team = "Team" if selected_lang == "EN" else "Drużyna"
+        th_mp = "MP" if selected_lang == "EN" else "M"
+        card_title = ("xG Differential Standings" if selected_lang == "EN" else "Tabela Różnicy xG (xGD)") + (f" ({len(xgd_df)})" if is_top5_selected and show_all else (" (Top 20)" if is_top5_selected else ""))
+
+        table_height = max(400, len(xgd_df) * 31 + 80)
+
+        card_xgd_html = f"""
+        <div style="background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; padding: 14px 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 680px; margin: 6px auto;">
+            <div style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+                <span>{card_title}</span>
+                <span style="font-size: 11px; color: #8B949E; font-weight: 500;">xGD = xG - xGA</span>
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.2;">
+                <thead>
+                    <tr style="border-bottom: 2px solid #30363D; color: #8B949E; font-size: 11px; text-transform: uppercase; height: 28px;">
+                        <th style="width: 38px; text-align: left; padding: 4px 8px;">#</th>
+                        <th style="text-align: left; padding: 4px 8px;">{th_team}</th>
+                        <th style="width: 55px; text-align: center; padding: 4px 8px;">{th_mp}</th>
+                        <th style="width: 85px; text-align: center; color: #38BDF8; padding: 4px 8px;">xG / 90</th>
+                        <th style="width: 85px; text-align: center; color: #F59E0B; padding: 4px 8px;">xGA / 90</th>
+                        <th style="width: 95px; text-align: right; padding: 4px 8px;">xGD</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_xgd_html}
+                </tbody>
+            </table>
+        </div>
+        """
+
+        components.html(card_xgd_html, height=table_height, scrolling=True if (is_top5_selected and show_all) else False)  
 
 
 with tab_ofensywa:
