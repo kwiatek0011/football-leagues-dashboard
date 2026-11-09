@@ -1563,13 +1563,13 @@ with tab_ogolne:
         ]
         st.dataframe(display_df[ogolne_cols], use_container_width=True, hide_index=True, column_config=common_col_config)
 
-    # 4. Widok: Tabela Różnicy xG (xG Difference: xG - xGA)
+    # 4. Widok: Tabela Różnicy xG (xG Difference: Suma xG - Suma xGA)
     elif ogolne_widok == t("gen_opt4"):
-        st.subheader("⚖️ Tabela Bilansu Zagrożenia (xGD)" if selected_lang == "PL" else "⚖️ Expected Goals Differential Standings (xGD)")
+        st.subheader("⚖️ Tabela Bilansu Zagrożenia (Suma xGD)" if selected_lang == "PL" else "⚖️ Expected Goals Total Differential Standings (xGD)")
         st.caption(
-            "Ranking zespołów uszeregowany według czystej różnicy wykreowanego zagrożenia (xG) i dopuszczonego (xGA)."
+            "Ranking zespołów uszeregowany według łącznej sumy wykreowanego zagrożenia (xG) i dopuszczonego (xGA) w całym sezonie."
             if selected_lang == "PL" else
-            "League standings ranked by net expected goal differential (xGD = xG - xGA)."
+            "League standings ranked by cumulative expected goal differential (Total xGD = Total xG - Total xGA)."
         )
 
         # Obsługa przełącznika Top 20 vs Całość dla scalonej bazy Top 5 lig
@@ -1584,8 +1584,8 @@ with tab_ogolne:
         else:
             show_all = True
 
-        # Sortowanie po różnicy xG na mecz (malejąco)
-        xgd_sorted_full = team_stats.sort_values(by="Bilans_xG", ascending=False).copy().reset_index(drop=True)
+        # Sortowanie po łącznym bilansie xG w sezonie (malejąco)
+        xgd_sorted_full = team_stats.sort_values(by="Bilans_xG_Suma", ascending=False).copy().reset_index(drop=True)
         xgd_df = xgd_sorted_full if show_all else xgd_sorted_full.head(20)
 
         # Generowanie wierszy w stylu ciemnej karty raportowej
@@ -1594,36 +1594,39 @@ with tab_ogolne:
             rank = idx + 1
             team = row["Team"]
             mp = int(row["Mecze"]) if "Mecze" in row else len(xgd_df)
-            xg_val = float(row["xG_na_mecz"])
-            xga_val = float(row["xGA_na_mecz"])
-            xgd_val = float(row["Bilans_xG"])
+            xg_sum = float(row["xG_Suma"])
+            xga_sum = float(row["xGA_Suma"])
+            xgd_sum = float(row["Bilans_xG_Suma"])
 
-            # Kolorowanie delty: zielony dla dominatorów, czerwony dla deficytu
-            diff_color = "#10B981" if xgd_val > 0 else ("#EF4444" if xgd_val < 0 else "#CBD5E1")
-            diff_str = f"{xgd_val:+.2f}"
+            # Kolorowanie delty: zielony dla przewagi, czerwony dla deficytu
+            diff_color = "#10B981" if xgd_sum > 0 else ("#EF4444" if xgd_sum < 0 else "#CBD5E1")
+            diff_str = f"{xgd_sum:+.2f}"
 
             rows_xgd_html += f"""
             <tr style="height: 29px; border-bottom: 1px solid #21262D;">
                 <td style="font-weight: 700; color: #FFFFFF; text-align: left; width: 38px; padding: 4px 8px;">{rank}</td>
                 <td style="font-weight: 600; color: #E2E8F0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 4px 8px;">{team}</td>
                 <td style="color: #94A3B8; text-align: center; width: 55px; padding: 4px 8px;">{mp}</td>
-                <td style="color: #38BDF8; font-weight: 600; text-align: center; width: 85px; padding: 4px 8px;">{xg_val:.2f}</td>
-                <td style="color: #F59E0B; font-weight: 600; text-align: center; width: 85px; padding: 4px 8px;">{xga_val:.2f}</td>
+                <td style="color: #38BDF8; font-weight: 600; text-align: center; width: 90px; padding: 4px 8px;">{xg_sum:.2f}</td>
+                <td style="color: #F59E0B; font-weight: 600; text-align: center; width: 90px; padding: 4px 8px;">{xga_sum:.2f}</td>
                 <td style="font-weight: 700; color: {diff_color}; text-align: right; width: 95px; padding: 4px 8px;">{diff_str}</td>
             </tr>
             """
 
         th_team = "Team" if selected_lang == "EN" else "Drużyna"
         th_mp = "MP" if selected_lang == "EN" else "M"
-        card_title = ("xG Differential Standings" if selected_lang == "EN" else "Tabela Różnicy xG (xGD)") + (f" ({len(xgd_df)})" if is_top5_selected and show_all else (" (Top 20)" if is_top5_selected else ""))
-
+        th_xg = "Total xG" if selected_lang == "EN" else "Suma xG"
+        th_xga = "Total xGA" if selected_lang == "EN" else "Suma xGA"
+        th_diff = "Total xGD" if selected_lang == "EN" else "Suma xGD"
+        
+        card_title = ("Total xG Differential Standings" if selected_lang == "EN" else "Tabela Łącznej Różnicy xG (Suma)") + (f" ({len(xgd_df)})" if is_top5_selected and show_all else (" (Top 20)" if is_top5_selected else ""))
         table_height = max(400, len(xgd_df) * 31 + 80)
 
         card_xgd_html = f"""
         <div style="background-color: #161B22; border: 1px solid #30363D; border-radius: 8px; padding: 14px 18px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 680px; margin: 6px auto;">
             <div style="font-size: 15px; font-weight: 700; color: #FFFFFF; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                 <span>{card_title}</span>
-                <span style="font-size: 11px; color: #8B949E; font-weight: 500;">xGD = xG - xGA</span>
+                <span style="font-size: 11px; color: #8B949E; font-weight: 500;">xGD = Suma xG − Suma xGA</span>
             </div>
             <table style="width: 100%; border-collapse: collapse; font-size: 12.5px; line-height: 1.2;">
                 <thead>
@@ -1631,9 +1634,9 @@ with tab_ogolne:
                         <th style="width: 38px; text-align: left; padding: 4px 8px;">#</th>
                         <th style="text-align: left; padding: 4px 8px;">{th_team}</th>
                         <th style="width: 55px; text-align: center; padding: 4px 8px;">{th_mp}</th>
-                        <th style="width: 85px; text-align: center; color: #38BDF8; padding: 4px 8px;">xG / 90</th>
-                        <th style="width: 85px; text-align: center; color: #F59E0B; padding: 4px 8px;">xGA / 90</th>
-                        <th style="width: 95px; text-align: right; padding: 4px 8px;">xGD</th>
+                        <th style="width: 90px; text-align: center; color: #38BDF8; padding: 4px 8px;">{th_xg}</th>
+                        <th style="width: 90px; text-align: center; color: #F59E0B; padding: 4px 8px;">{th_xga}</th>
+                        <th style="width: 95px; text-align: right; padding: 4px 8px;">{th_diff}</th>
                     </tr>
                 </thead>
                 <tbody>
