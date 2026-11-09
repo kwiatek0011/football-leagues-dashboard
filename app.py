@@ -29,6 +29,7 @@ TRANSLATIONS = {
         "gen_opt1": "Tabela Realna vs Tabela xG",
         "gen_opt2": "Mecze u Siebie vs Mecze na Wyjeździe",
         "gen_opt3": "Pełna Tabela Zbiorcza (Metryki zaawansowane)",
+        "gen_opt4": "Tabela Różnicy xG (xG Difference: xG - xGA)",
 
         # Moduły Ataku
         "att_select": "Wybierz moduł analizy ofensywnej:",
@@ -115,6 +116,7 @@ TRANSLATIONS = {
         "gen_opt1": "Real Table vs xG Table",
         "gen_opt2": "Home vs Away Form",
         "gen_opt3": "Full Table (Advanced Metrics)",
+        "gen_opt4": "xG Difference Table (xGD: xG - xGA)",
 
         # Moduły Ataku
         "att_select": "Select offensive analysis view:",
@@ -1393,7 +1395,8 @@ with tab_ogolne:
         [
             t("gen_opt1"),
             t("gen_opt2"),
-            t("gen_opt3")
+            t("gen_opt3"),
+            t("gen_opt4")
         ]
     )
     st.markdown("---")
@@ -1559,6 +1562,66 @@ with tab_ogolne:
             "Posiadanie", "Podania ogolem", "Podania celne", "Pojedynki Wygrane"
         ]
         st.dataframe(display_df[ogolne_cols], use_container_width=True, hide_index=True, column_config=common_col_config)
+
+    # 4. Widok: Tabela Różnicy xG (xG Difference: xG - xGA)
+    elif ogolne_widok == t("gen_opt4"):
+        st.subheader("⚖️ Tabela Bilansu Zagrożenia (xG Difference: xG - xGA)" if selected_lang == "PL" else "⚖️ Expected Goals Differential Standings (xGD)")
+        st.caption(
+            "Ranking zespołów uszeregowany według czystej przewagi tworzonego zagrożenia (xG) nad dopuszczonym (xGA). Dodatnie wartości oznaczają dominację nad rywalami."
+            if selected_lang == "PL" else
+            "League standings sorted by net expected goal differential (xG - xGA). Positive values indicate sustained match dominance."
+        )
+
+        # Obsługa widoku Top 20 vs Całość dla scalonej bazy Top 5 lig
+        is_top5_selected = (current_league["file"] == "TOP5")
+        if is_top5_selected:
+            scope_opts = ["Top 20", "Pełna Tabela (Wszystkie zespoły)"] if selected_lang == "PL" else ["Top 20", "Full Standings (All Teams)"]
+            selected_scope = st.radio(
+                "Zakres tabeli:" if selected_lang == "PL" else "Standings Scope:",
+                scope_opts, index=0, horizontal=True, key="radio_xgd_table_scope"
+            )
+            show_all = bool(selected_scope and ("Pełna" in selected_scope or "Full" in selected_scope))
+        else:
+            show_all = True
+
+        # Sortowanie po różnicy xG na mecz (malejąco)
+        xgd_df = team_stats.sort_values(by="Bilans_xG", ascending=False).copy().reset_index(drop=True)
+        xgd_df.index = xgd_df.index + 1
+        xgd_df = xgd_df.reset_index().rename(columns={"index": "#"})
+
+        if not show_all:
+            xgd_df = xgd_df.head(20)
+
+        # Zestaw wybranych kolumn
+        xgd_cols = [
+            "#", "Team", "Mecze", 
+            "xG_na_mecz", "xGA_na_mecz", "Bilans_xG",
+            "xG_Suma", "xGA_Suma", "Bilans_xG_Suma",
+            "Bilans_Bramkowy", "Punkty"
+        ]
+
+        # Konfiguracja formatowania kolumn tabeli
+        xgd_col_config = {
+            "#": st.column_config.NumberColumn("#", width="small"),
+            "Team": st.column_config.TextColumn("Drużyna" if selected_lang == "PL" else "Team", width="medium"),
+            "Mecze": st.column_config.NumberColumn("M" if selected_lang == "PL" else "MP", width="small"),
+            "xG_na_mecz": st.column_config.NumberColumn("xG / mecz" if selected_lang == "PL" else "xG / 90", format="%.2f"),
+            "xGA_na_mecz": st.column_config.NumberColumn("xGA / mecz" if selected_lang == "PL" else "xGA / 90", format="%.2f"),
+            "Bilans_xG": st.column_config.NumberColumn("Bilans xG / mecz" if selected_lang == "PL" else "xGD / 90", format="%+.2f"),
+            "xG_Suma": st.column_config.NumberColumn("xG Suma" if selected_lang == "PL" else "Total xG", format="%.2f"),
+            "xGA_Suma": st.column_config.NumberColumn("xGA Suma" if selected_lang == "PL" else "Total xGA", format="%.2f"),
+            "Bilans_xG_Suma": st.column_config.NumberColumn("Bilans xG Suma" if selected_lang == "PL" else "Total xGD", format="%+.2f"),
+            "Bilans_Bramkowy": st.column_config.NumberColumn("Realny Bilans" if selected_lang == "PL" else "Goal Diff", format="%+d"),
+            "Punkty": st.column_config.NumberColumn("Pkt" if selected_lang == "PL" else "Pts", width="small")
+        }
+
+        st.dataframe(
+            xgd_df[xgd_cols],
+            use_container_width=True,
+            hide_index=True,
+            column_config=xgd_col_config,
+            height=max(450, min(800, len(xgd_df) * 35 + 40))
+        )    
 
 
 with tab_ofensywa:
