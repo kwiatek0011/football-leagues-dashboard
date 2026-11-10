@@ -2098,8 +2098,53 @@ with tab_ofensywa:
         )    
 
 # =========================================================================
-# TAB 3: STATYSTYKI DEFENSYWNE (PL / EN)
+# TAB 3: STATYSTYKI DEFENSYWNE (Z OBSŁUGĄ FILTRA KOLEJEK)
+# =========================================================================
 with tab_defensywa:
+    # 1. KONTROLER ZAKRESU KOLEJEK
+    max_gw = int(matches_df["Kolejka"].max()) if ("Kolejka" in matches_df.columns and len(matches_df) > 0) else 10
+    
+    col_filter_mode, col_filter_val = st.columns([1.6, 2.4])
+    with col_filter_mode:
+        gw_filter_type_def = st.radio(
+            "Zakres meczów:" if selected_lang == "PL" else "Matchweek Scope:",
+            ["Cały sezon", "Stan po kolejce (1 do N)", "Tylko konkretna kolejka"] if selected_lang == "PL" else ["Full Season", "Up to Matchweek (1 to N)", "Single Matchweek"],
+            index=0,
+            horizontal=True,
+            key="radio_gw_filter_def"
+        )
+    
+    with col_filter_val:
+        if "Stan po kolejce" in gw_filter_type_def or "Up to" in gw_filter_type_def:
+            target_gw = st.slider(
+                "Wybierz stan po ilu kolejkach:" if selected_lang == "PL" else "State after matchweek:",
+                min_value=1, max_value=max_gw, value=min(4, max_gw), step=1,
+                key="slider_gw_cum_def"
+            )
+            def_matches = matches_df[matches_df["Kolejka"] <= target_gw].copy()
+            def_team_stats = compute_team_stats(def_matches)
+            st.caption(f"Pokazuję skumulowane statystyki defensywne po **{target_gw}** rozegranych kolejkach (kolejki 1–{target_gw}).")
+        elif "Tylko konkretna" in gw_filter_type_def or "Single" in gw_filter_type_def:
+            target_gw = st.selectbox(
+                "Wybierz kolejkę:" if selected_lang == "PL" else "Select matchweek:",
+                list(range(1, max_gw + 1)), index=0,
+                key="sb_gw_single_def"
+            )
+            def_matches = matches_df[matches_df["Kolejka"] == target_gw].copy()
+            def_team_stats = compute_team_stats(def_matches)
+            st.caption(f"Pokazuję wyłącznie zdarzenia z **{target_gw}.** kolejki.")
+        else:
+            def_matches = matches_df.copy()
+            def_team_stats = team_stats.copy()
+
+    # Lokalna tabela do widoku 1
+    def_display_df = def_team_stats.copy()
+    float_cols_def = def_display_df.select_dtypes(include=["float"]).columns
+    def_display_df[float_cols_def] = def_display_df[float_cols_def].round(2)
+    def_display_df.columns = [col.replace("_", " ") for col in def_display_df.columns]
+
+    st.markdown("---")
+
     defensywa_widok = st.selectbox(
         t("def_select"),
         [t(f"def_opt{i}") for i in range(1, 21)],
@@ -2114,155 +2159,155 @@ with tab_defensywa:
             "Team", "Mecze", "Gole Stracone", "Gole stracone na mecz", "xGA na mecz", 
             "xAGOT na mecz", "Odbiory", "Przejecia", "Rzuty Rozne", "Pojedynki Wygrane"
         ]
-        st.dataframe(display_df[defensywa_cols], use_container_width=True, hide_index=True, column_config=common_col_config)
+        st.dataframe(def_display_df[defensywa_cols], use_container_width=True, hide_index=True, column_config=common_col_config)
 
     # 2. Total xGA
     elif defensywa_widok == t("def_opt2"):
         st.subheader("Expected Goals Against (xGA)" if selected_lang == "EN" else "Dopuszczona jakość sytuacji bramkowych rywali (Expected Goals Against)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xGA_na_mecz", 
+            df=def_team_stats, col_name="xGA_na_mecz", 
             title_chart="Total Expected Goals Against (xGA) Rankings",
             title_paper="Total xGA Rankings", 
             value_header="xGA / 90", 
             color_scale="Reds_r", sort_asc=True
         )
-        render_metric_trend_chart(matches_df, team_stats, "xG_Against", "xGA_na_mecz", "Dopuszczone xGA (xGA)", "xGA")
+        render_metric_trend_chart(def_matches, def_team_stats, "xG_Against", "xGA_na_mecz", "Dopuszczone xGA (xGA)", "xGA")
 
     # 3. Open Play xGA
     elif defensywa_widok == t("def_opt3"):
         st.subheader("Open Play xGA" if selected_lang == "EN" else "Dopuszczone sytuacje z gry otwartej (Open Play xGA)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xGA_OP_na_mecz", 
+            df=def_team_stats, col_name="xGA_OP_na_mecz", 
             title_chart="Open Play xGA Rankings",
             title_paper="Open Play xGA Rankings", 
             value_header="xGA OP / 90", 
             color_scale="Reds_r", sort_asc=True
         )
-        render_metric_trend_chart(matches_df, team_stats, "xG_OP_Against", "xGA_OP_na_mecz", "Open Play xGA", "xGA OP")
+        render_metric_trend_chart(def_matches, def_team_stats, "xG_OP_Against", "xGA_OP_na_mecz", "Open Play xGA", "xGA OP")
 
     # 4. Set Play xGA
     elif defensywa_widok == t("def_opt4"):
         st.subheader("Set Play xGA" if selected_lang == "EN" else "Zagrożenie dopuszczone po stałych fragmentach (Set Play xGA)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xGA_SP_na_mecz", 
+            df=def_team_stats, col_name="xGA_SP_na_mecz", 
             title_chart="Set Play xGA Rankings",
             title_paper="Set Play xGA Rankings", 
             value_header="SP xGA / 90", 
             color_scale="Oranges_r", sort_asc=True
         )
-        render_metric_trend_chart(matches_df, team_stats, "xG_SP_Against", "xGA_SP_na_mecz", "Set Play xGA", "SP xGA")
+        render_metric_trend_chart(def_matches, def_team_stats, "xG_SP_Against", "xGA_SP_na_mecz", "Set Play xGA", "SP xGA")
 
     # 5. npxGA
     elif defensywa_widok == t("def_opt5"):
         st.subheader("Non-Penalty xGA" if selected_lang == "EN" else "Czyste dopuszczone zagrożenie bez rzutów karnych (Non-Penalty xGA)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="npxGA_na_mecz", 
+            df=def_team_stats, col_name="npxGA_na_mecz", 
             title_chart="Non-Penalty xGA Rankings",
             title_paper="Non-Penalty xGA Rankings", 
             value_header="npxGA / 90", 
             color_scale="Purples_r", sort_asc=True
         )
-        render_metric_trend_chart(matches_df, team_stats, "npxG_Against", "npxGA_na_mecz", "Non-Penalty xGA", "npxGA")
+        render_metric_trend_chart(def_matches, def_team_stats, "npxG_Against", "npxGA_na_mecz", "Non-Penalty xGA", "npxGA")
 
     # 6. xAGOT
     elif defensywa_widok == t("def_opt6"):
         st.subheader("Expected Goals on Target Against (xAGOT)" if selected_lang == "EN" else "Jakość uderzeń rywali zmierzających w światło naszej bramki (xAGOT)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xAGOT_na_mecz", 
+            df=def_team_stats, col_name="xAGOT_na_mecz", 
             title_chart="Expected Goals on Target Against (xAGOT)",
             title_paper="xAGOT Rankings", 
             value_header="xAGOT / 90", 
             color_scale="Reds_r", sort_asc=True
         )
-        render_metric_trend_chart(matches_df, team_stats, "xGOT_Against", "xAGOT_na_mecz", "xAGOT (Celne Rywala)", "xAGOT")
+        render_metric_trend_chart(def_matches, def_team_stats, "xGOT_Against", "xAGOT_na_mecz", "xAGOT (Celne Rywala)", "xAGOT")
 
     # 7. xGA na jeden strzał rywala
     elif defensywa_widok == t("def_opt7"):
         st.subheader("xGA per Opponent Shot" if selected_lang == "EN" else "Średnia jakość pojedynczego strzału rywala (xGA / Shot Against)")
         st.caption("Lower value = Opponents forced to shoot from difficult angles and low-value zones." if selected_lang == "EN" else "Mniejsza wartość = rywale są zmuszani do strzałów z trudnych, nieprzygotowanych pozycji.")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xGA_na_strzal_rywala", 
+            df=def_team_stats, col_name="xGA_na_strzal_rywala", 
             title_chart="xGA per Opponent Shot Rankings",
             title_paper="xGA / Shot Against", 
             value_header="xGA / Opp Shot" if selected_lang == "EN" else "xGA / Strzał rywala", 
             color_scale="Reds_r", sort_asc=True
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = def_matches.copy()
         matches_df_temp["xGA_Shot_Opp_Match"] = (matches_df_temp["xG_Against"] / matches_df_temp["Shots_Against"]).fillna(0).round(3)
-        render_metric_trend_chart(matches_df_temp, team_stats, "xGA_Shot_Opp_Match", "xGA_na_strzal_rywala", "xGA / Strzał Rywala", "xGA / Strzał")
+        render_metric_trend_chart(matches_df_temp, def_team_stats, "xGA_Shot_Opp_Match", "xGA_na_strzal_rywala", "xGA / Strzał Rywala", "xGA / Strzał")
 
     # 8. Trudność strzelenia gola
     elif defensywa_widok == t("def_opt8"):
         st.subheader("Resilience: xGA Needed to Score Against" if selected_lang == "EN" else "Odporność: Ile xGA musi wykreować rywal, by wbić nam 1 bramkę?")
         st.caption("Higher value = Opponent must work harder; defensive unit and goalkeeper negate quality chances." if selected_lang == "EN" else "Większa wartość = rywal musi się napracować, obrona i bramkarz 'kasują' wykreowane szanse.")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xGA_na_gola_straconego", 
+            df=def_team_stats, col_name="xGA_na_gola_straconego", 
             title_chart="xGA Needed to Score Against Rankings",
             title_paper="xGA / Goal Conceded", 
             value_header="xGA / Conceded Goal" if selected_lang == "EN" else "xGA na 1 Gola", 
             color_scale="Greens", sort_asc=False
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = def_matches.copy()
         matches_df_temp["xGA_GA_Match"] = matches_df_temp.apply(lambda r: round(r["xG_Against"] / r["Goals_Against"], 2) if r["Goals_Against"] > 0 else 0.0, axis=1)
-        render_metric_trend_chart(matches_df_temp, team_stats, "xGA_GA_Match", "xGA_na_gola_straconego", "xGA na Gola Straconego", "xGA / Gol")
+        render_metric_trend_chart(matches_df_temp, def_team_stats, "xGA_GA_Match", "xGA_na_gola_straconego", "xGA na Gola Straconego", "xGA / Gol")
 
     # 9. Celne strzały rywala na gola
     elif defensywa_widok == t("def_opt9"):
         st.subheader("Brick Wall: Opponent Shots on Target Needed per Goal" if selected_lang == "EN" else "Ściana w bramce: Ile celnych strzałów rywal musi oddać na 1 gola?")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Celne_rywala_na_gola", 
+            df=def_team_stats, col_name="Celne_rywala_na_gola", 
             title_chart="Opponent SoT Needed per Goal",
             title_paper="SoT Against / Goal", 
             value_header="Opp SoT / Goal" if selected_lang == "EN" else "SoT rywala / Gol", 
             color_scale="Greens", sort_asc=False
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = def_matches.copy()
         matches_df_temp["SoT_GA_Match"] = matches_df_temp.apply(lambda r: round(r["Shots_On_Target_Against"] / r["Goals_Against"], 2) if r["Goals_Against"] > 0 else 0.0, axis=1)
-        render_metric_trend_chart(matches_df_temp, team_stats, "SoT_GA_Match", "Celne_rywala_na_gola", "Celne Strzały Rywala na Gola", "SoT / Gol")
+        render_metric_trend_chart(matches_df_temp, def_team_stats, "SoT_GA_Match", "Celne_rywala_na_gola", "Celne Strzały Rywala na Gola", "SoT / Gol")
 
     # 10. Gole Uratowane / Stracone (xGA - Gole)
     elif defensywa_widok == t("def_opt10"):
         st.subheader("Goals Prevented (xGA - Goals Conceded)" if selected_lang == "EN" else "Bramki Uratowane ponad stan (Suma xGA - Gole Stracone)")
         st.caption("Positive values (green / right) = Team conceded FEWER goals than expected from opponent threat." if selected_lang == "EN" else "Wartości dodatnie (zielone / w prawo) = zespół stracił MNIEJ goli niż wynikało z zagrożenia rywali.")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Gole_stracone_minus_xGA", 
+            df=def_team_stats, col_name="Gole_stracone_minus_xGA", 
             title_chart="Defensive Goals Prevented (xGA - GA)",
             title_paper="Goals Prevented (xGA - GA)", 
             value_header="Prevented (xGA - GA)" if selected_lang == "EN" else "Gole uratowane (xGA - GA)", 
             color_scale="RdYlGn", sort_asc=False
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = def_matches.copy()
         matches_df_temp["Prevented_Match"] = (matches_df_temp["xG_Against"] - matches_df_temp["Goals_Against"]).round(2)
-        render_metric_trend_chart(matches_df_temp, team_stats, "Prevented_Match", "xGA_na_mecz", "Uratowane Gole (xGA - GA)", "Gole")
+        render_metric_trend_chart(matches_df_temp, def_team_stats, "Prevented_Match", "xGA_na_mecz", "Uratowane Gole (xGA - GA)", "Gole")
 
     # 11. Strzały rywala z pola karnego
     elif defensywa_widok == t("def_opt11"):
         st.subheader("Opponent Shots Inside Box" if selected_lang == "EN" else "Dopuszczone uderzenia z własnej szesnastki")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Box_Shots_Against_Mean", 
+            df=def_team_stats, col_name="Box_Shots_Against_Mean", 
             title_chart="Opponent Shots Inside Box per Match",
             title_paper="Shots Inside Box Against", 
             value_header="Opp Box Shots / 90" if selected_lang == "EN" else "W polu / 90", 
             color_scale="Reds_r", sort_asc=True
         )
-        render_metric_trend_chart(matches_df, team_stats, "Box_Shots_Against", "Box_Shots_Against_Mean", "Dopuszczone Strzały w Polu", "Strzały")
+        render_metric_trend_chart(def_matches, def_team_stats, "Box_Shots_Against", "Box_Shots_Against_Mean", "Dopuszczone Strzały w Polu", "Strzały")
 
     # 12. Strzały rywala zza pola karnego
     elif defensywa_widok == t("def_opt12"):
         st.subheader("Opponent Long Range Shots Outside Box" if selected_lang == "EN" else "Dopuszczone uderzenia z dystansu")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Outside_Box_Shots_Against_Mean", 
+            df=def_team_stats, col_name="Outside_Box_Shots_Against_Mean", 
             title_chart="Opponent Shots Outside Box per Match",
             title_paper="Shots Outside Box Against", 
             value_header="Opp Long Range / 90" if selected_lang == "EN" else "Z dystansu / 90", 
             color_scale="Purples_r", sort_asc=True
         )
-        render_metric_trend_chart(matches_df, team_stats, "Outside_Box_Shots_Against", "Outside_Box_Shots_Against_Mean", "Dopuszczone Strzały z Dystansu", "Strzały")
+        render_metric_trend_chart(def_matches, def_team_stats, "Outside_Box_Shots_Against", "Outside_Box_Shots_Against_Mean", "Dopuszczone Strzały z Dystansu", "Strzały")
 
     # 13. Rozkład xGA: Open Play vs Set Play
     elif defensywa_widok == t("def_opt13"):
         st.subheader("xGA Breakdown: Open Play vs Set Play" if selected_lang == "EN" else "Skąd rywale stwarzają zagrożenie: Gra Otwarta vs Stałe Fragmenty")
-        dist_def = team_stats.copy()
+        dist_def = def_team_stats.copy()
         dist_def["Karne_Inne_xGA"] = (dist_def["xGA_na_mecz"] - dist_def["xGA_OP_na_mecz"] - dist_def["xGA_SP_na_mecz"]).clip(lower=0).round(2)
         dist_def = dist_def.sort_values(by="xGA_na_mecz", ascending=True).reset_index(drop=True)
 
@@ -2272,62 +2317,62 @@ with tab_defensywa:
         fig_dist_d.add_trace(go.Bar(y=dist_def["Team"], x=dist_def["Karne_Inne_xGA"], name="Penalties / Other" if selected_lang == "EN" else "Karne/Inne xGA", orientation='h', marker=dict(color="#94A3B8")))
         fig_dist_d.update_layout(barmode='stack', height=620, template="simple_white", paper_bgcolor="#FFFFFF", plot_bgcolor="#F8FAFC", title=dict(text="<b>xGA Breakdown</b>", x=0.04, y=0.96), xaxis=dict(title="xGA / 90"), yaxis=dict(tickfont=dict(size=10.5, color="#1E293B")), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         st.plotly_chart(fig_dist_d, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "xG_OP_Against", "xGA_OP_na_mecz", "Dopuszczone Open Play xGA", "xGA OP")
+        render_metric_trend_chart(def_matches, def_team_stats, "xG_OP_Against", "xGA_OP_na_mecz", "Dopuszczone Open Play xGA", "xGA OP")
 
     # 14. Celność strzałów rywala
     elif defensywa_widok == t("def_opt14"):
         st.subheader("Opponent Shot Accuracy (%)" if selected_lang == "EN" else "Jaki procent strzałów rywali zmierza w światło naszej bramki?")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Celnosc_strzalow_rywala_proc", 
+            df=def_team_stats, col_name="Celnosc_strzalow_rywala_proc", 
             title_chart="Opponent Shot Accuracy %",
             title_paper="Opponent Shot Accuracy", 
             value_header="Opp Accuracy %" if selected_lang == "EN" else "Celność rywali %", 
             color_scale="Reds_r", sort_asc=True
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = def_matches.copy()
         matches_df_temp["Opp_Shot_Acc_Match"] = ((matches_df_temp["Shots_On_Target_Against"] / matches_df_temp["Shots_Against"]) * 100).fillna(0).round(1)
-        render_metric_trend_chart(matches_df_temp, team_stats, "Opp_Shot_Acc_Match", "Celnosc_strzalow_rywala_proc", "Celność Strzałów Rywala (%)", "%")
+        render_metric_trend_chart(matches_df_temp, def_team_stats, "Opp_Shot_Acc_Match", "Celnosc_strzalow_rywala_proc", "Celność Strzałów Rywala (%)", "%")
 
     # 15. Big Chances Conceded
     elif defensywa_widok == t("def_opt15"):
         st.subheader("Big Chances Conceded" if selected_lang == "EN" else "Dopuszczone Wielkie Szanse (Big Chances rywali na mecz)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Big_Chances_Against_Mean", 
+            df=def_team_stats, col_name="Big_Chances_Against_Mean", 
             title_chart="Big Chances Conceded per Match",
             title_paper="Big Chances Conceded", 
             value_header="Conceded BC / 90" if selected_lang == "EN" else "Dopuszczone BC / 90", 
             color_scale="Reds_r", sort_asc=True
         )
-        render_metric_trend_chart(matches_df, team_stats, "Big_Chances_Against", "Big_Chances_Against_Mean", "Dopuszczone Big Chances", "Szanse")
+        render_metric_trend_chart(def_matches, def_team_stats, "Big_Chances_Against", "Big_Chances_Against_Mean", "Dopuszczone Big Chances", "Szanse")
 
     # 16. Matryca Odporności
     elif defensywa_widok == t("def_opt16"):
         st.subheader("Resilience Matrix: xGA vs xGA per Goal Conceded" if selected_lang == "EN" else "Matryca Odporności: Dopuszczona jakość (xGA) vs Trudność sforsowania (xGA/Gol)")
-        avg_xga = team_stats["xGA_na_mecz"].mean()
-        avg_res = team_stats["xGA_na_gola_straconego"].mean()
+        avg_xga = def_team_stats["xGA_na_mecz"].mean()
+        avg_res = def_team_stats["xGA_na_gola_straconego"].mean()
         fig_m = go.Figure()
         fig_m.add_vline(x=avg_xga, line_dash="dash", line_color="#475569")
         fig_m.add_hline(y=avg_res, line_dash="dash", line_color="#475569")
-        for _, row in team_stats.iterrows():
+        for _, row in def_team_stats.iterrows():
             fig_m.add_trace(go.Scatter(
                 x=[row["xGA_na_mecz"]], y=[row["xGA_na_gola_straconego"]], mode="markers+text", text=[row["Team"]], textposition="top center",
                 marker=dict(size=12, color="#EF4444", line=dict(width=1.2, color="#0F172A")), showlegend=False
             ))
         fig_m.update_layout(height=600, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22", xaxis=dict(title="Conceded xGA / 90 (Lower = Better)" if selected_lang == "EN" else "Dopuszczone xGA / mecz (Mniej = Lepiej)", autorange="reversed"), yaxis=dict(title="xGA Needed to Score Against (Higher = Harder)" if selected_lang == "EN" else "xGA potrzebne na strzelenie gola (Więcej = Twardszy mur)"))
         st.plotly_chart(fig_m, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "xG_Against", "xGA_na_mecz", "Dopuszczone xGA", "xGA")
+        render_metric_trend_chart(def_matches, def_team_stats, "xG_Against", "xGA_na_mecz", "Dopuszczone xGA", "xGA")
 
     # 17. Relacja xGA vs xAGOT
     elif defensywa_widok == t("def_opt17"):
         st.subheader("xGA (Pre-Shot Quality) vs xAGOT (Post-Shot Quality on Target)" if selected_lang == "EN" else "Dopuszczone xGA (przed strzałem) vs xAGOT (jakość po strzale rywala w bramkę)")
-        corr_d = team_stats["xGA_na_mecz"].corr(team_stats["xAGOT_na_mecz"])
+        corr_d = def_team_stats["xGA_na_mecz"].corr(def_team_stats["xAGOT_na_mecz"])
         c1, c2, c3 = st.columns(3)
         c1.metric("Correlation (r)" if selected_lang == "EN" else "Współczynnik korelacji (r)", f"{corr_d:.2f}")
-        c2.metric("Average xGA / 90" if selected_lang == "EN" else "Średnie xGA / mecz", f"{team_stats['xGA_na_mecz'].mean():.2f}")
-        c3.metric("Average xAGOT / 90" if selected_lang == "EN" else "Średnie xAGOT / mecz", f"{team_stats['xAGOT_na_mecz'].mean():.2f}")
+        c2.metric("Average xGA / 90" if selected_lang == "EN" else "Średnie xGA / mecz", f"{def_team_stats['xGA_na_mecz'].mean():.2f}")
+        c3.metric("Average xAGOT / 90" if selected_lang == "EN" else "Średnie xAGOT / mecz", f"{def_team_stats['xAGOT_na_mecz'].mean():.2f}")
 
         fig_rel_d = px.scatter(
-            team_stats, x="xGA_na_mecz", y="xAGOT_na_mecz", text="Team",
+            def_team_stats, x="xGA_na_mecz", y="xAGOT_na_mecz", text="Team",
             template="plotly_dark", height=580,
             labels={
                 "xGA_na_mecz": "Conceded xGA / 90" if selected_lang == "EN" else "Dopuszczone xGA na mecz",
@@ -2336,13 +2381,13 @@ with tab_defensywa:
         )
         fig_rel_d.update_traces(textposition="top center", marker=dict(size=12, color="#EF4444"))
         st.plotly_chart(fig_rel_d, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "xGOT_Against", "xAGOT_na_mecz", "Dopuszczone xAGOT", "xAGOT")
+        render_metric_trend_chart(def_matches, def_team_stats, "xGOT_Against", "xAGOT_na_mecz", "Dopuszczone xAGOT", "xAGOT")
 
     # 18. Kontakty rywala vs Strzały rywala
     elif defensywa_widok == t("def_opt18"):
         st.subheader("Opponent Box Efficiency: Touches vs Shots" if selected_lang == "EN" else "Dopuszczanie do szesnastki: Kontakty rywala w naszym polu vs Strzały rywala")
         fig_box_d = px.scatter(
-            team_stats, x="Box_Touches_Against_Mean", y="Box_Shots_Against_Mean", text="Team",
+            def_team_stats, x="Box_Touches_Against_Mean", y="Box_Shots_Against_Mean", text="Team",
             template="plotly_dark", height=580,
             labels={
                 "Box_Touches_Against_Mean": "Opp Touches in Box / 90" if selected_lang == "EN" else "Kontakty rywala w szesnastce / mecz",
@@ -2351,25 +2396,25 @@ with tab_defensywa:
         )
         fig_box_d.update_traces(textposition="top center", marker=dict(size=12, color="#EF4444"))
         st.plotly_chart(fig_box_d, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "Box_Touches_Against", "Box_Touches_Against_Mean", "Kontakty Rywala w Polu", "Kontakty")
+        render_metric_trend_chart(def_matches, def_team_stats, "Box_Touches_Against", "Box_Touches_Against_Mean", "Kontakty Rywala w Polu", "Kontakty")
 
     # 19. Strzały rywali potrzebne na zdobycie bramki
     elif defensywa_widok == t("def_opt19"):
         st.subheader("Opponent Shots Needed to Score" if selected_lang == "EN" else "Ile strzałów rywal musi oddać, by strzelić nam gola?")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Strzaly_rywala_na_gola", 
+            df=def_team_stats, col_name="Strzaly_rywala_na_gola", 
             title_chart="Opponent Shots Needed per Goal",
             title_paper="Shots Against / Goal", 
             value_header="Opp Shots / Goal" if selected_lang == "EN" else "Strzały rywala / 1 Gol", 
             color_scale="Greens", sort_asc=False
         )
-        render_metric_trend_chart(matches_df, team_stats, "Shots_Against", "Shots_Against_Mean", "Dopuszczone Strzały Rywala", "Strzały")
+        render_metric_trend_chart(def_matches, def_team_stats, "Shots_Against", "Shots_Against_Mean", "Dopuszczone Strzały Rywala", "Strzały")
 
     # 20. xAGOT vs Bramki Stracone (Goals Prevented)
     elif defensywa_widok == t("def_opt20"):
         st.subheader("Goalkeeping Impact: xAGOT vs Goals Conceded" if selected_lang == "EN" else "Praca Bramkarza: Jakość celnych strzałów rywala (xAGOT) vs Stracone Gole")
         fig_ps_d = px.scatter(
-            team_stats, x="xAGOT_na_mecz", y="Gole_stracone_na_mecz", text="Team",
+            def_team_stats, x="xAGOT_na_mecz", y="Gole_stracone_na_mecz", text="Team",
             template="plotly_dark", height=580,
             labels={
                 "xAGOT_na_mecz": "Conceded xAGOT / 90" if selected_lang == "EN" else "xAGOT dopuszczone / mecz",
@@ -2378,7 +2423,7 @@ with tab_defensywa:
         )
         fig_ps_d.update_traces(textposition="top center", marker=dict(size=12, color="#38BDF8"))
         st.plotly_chart(fig_ps_d, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "Goals_Against", "Gole_stracone_na_mecz", "Gole Stracone", "Bramki")
+        render_metric_trend_chart(def_matches, def_team_stats, "Goals_Against", "Gole_stracone_na_mecz", "Gole Stracone", "Bramki")
 
 # =========================================================================
 # TAB 4: DYSTRYBUCJA I PODANIA (PL / EN)
