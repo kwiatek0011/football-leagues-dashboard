@@ -1772,9 +1772,12 @@ with tab_ogolne:
         components.html(card_xgd_html, height=table_height, scrolling=True if (is_top5_selected and show_all) else False)  
 
 
+# =========================================================================
+# TAB 2: STATYSTYKI OFENSYWNE (Z PEŁNĄ OBSŁUGĄ FILTRA KOLEJEK)
+# =========================================================================
 with tab_ofensywa:
-    # --- KONTROLER KOLEJEK ---
-    max_gw = int(matches_df["Kolejka"].max()) if "Kolejka" in matches_df.columns else 10
+    # 1. KONTROLER ZAKRESU KOLEJEK
+    max_gw = int(matches_df["Kolejka"].max()) if ("Kolejka" in matches_df.columns and len(matches_df) > 0) else 10
     
     col_filter_mode, col_filter_val = st.columns([1.6, 2.4])
     with col_filter_mode:
@@ -1793,8 +1796,8 @@ with tab_ofensywa:
                 min_value=1, max_value=max_gw, value=min(4, max_gw), step=1,
                 key="slider_gw_cum_att"
             )
-            active_matches = matches_df[matches_df["Kolejka"] <= target_gw].copy()
-            active_team_stats = compute_team_stats(active_matches)
+            att_matches = matches_df[matches_df["Kolejka"] <= target_gw].copy()
+            att_team_stats = compute_team_stats(att_matches)
             st.caption(f"Pokazuję skumulowane statystyki po **{target_gw}** rozegranych kolejkach (kolejki 1–{target_gw}).")
         elif "Tylko konkretna" in gw_filter_type or "Single" in gw_filter_type:
             target_gw = st.selectbox(
@@ -1802,18 +1805,25 @@ with tab_ofensywa:
                 list(range(1, max_gw + 1)), index=0,
                 key="sb_gw_single_att"
             )
-            active_matches = matches_df[matches_df["Kolejka"] == target_gw].copy()
-            active_team_stats = compute_team_stats(active_matches)
+            att_matches = matches_df[matches_df["Kolejka"] == target_gw].copy()
+            att_team_stats = compute_team_stats(att_matches)
             st.caption(f"Pokazuję wyłącznie zdarzenia z **{target_gw}.** kolejki.")
         else:
-            active_matches = matches_df.copy()
-            active_team_stats = team_stats  # domyślny pełny sezon
-    
+            att_matches = matches_df.copy()
+            att_team_stats = team_stats.copy()
+
+    # Przygotowanie lokalnej tabeli do wyświetlania w module 1
+    att_display_df = att_team_stats.copy()
+    float_cols_att = att_display_df.select_dtypes(include=["float"]).columns
+    att_display_df[float_cols_att] = att_display_df[float_cols_att].round(2)
+    att_display_df.columns = [col.replace("_", " ") for col in att_display_df.columns]
+
     st.markdown("---")
 
     ofensywa_widok = st.selectbox(
         t("att_select"),
-        [t(f"att_opt{i}") for i in range(1, 22)]
+        [t(f"att_opt{i}") for i in range(1, 22)],
+        key="sb_ofensywa_submodules"
     )
     st.markdown("---")
 
@@ -1825,129 +1835,125 @@ with tab_ofensywa:
             "xGOT na mecz", "Bilans xG", "Strzaly na mecz", "Celne strzaly", 
             "Big Chances", "Kontakty w polu karnym", "Podania celne", "Posiadanie"
         ]
-        st.dataframe(display_df[ofensywa_cols], use_container_width=True, hide_index=True, column_config=common_col_config)
+        st.dataframe(att_display_df[ofensywa_cols], use_container_width=True, hide_index=True, column_config=common_col_config)
 
     # 2. Total xG
     elif ofensywa_widok == t("att_opt2"):
         st.subheader("Total Expected Goals (xG)" if selected_lang == "EN" else "Ogólna jakość kreowanych sytuacji (Expected Goals)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xG_na_mecz", title_chart="Total Expected Goals (xG) Rankings",
+            df=att_team_stats, col_name="xG_na_mecz", title_chart="Total Expected Goals (xG) Rankings",
             title_paper="Total xG Rankings", value_header="xG / 90", color_scale="Blues"
         )
-        render_metric_trend_chart(matches_df, team_stats, "xG_For", "xG_na_mecz", "Expected Goals (xG)", "xG")
+        render_metric_trend_chart(att_matches, att_team_stats, "xG_For", "xG_na_mecz", "Expected Goals (xG)", "xG")
 
     # 3. xG Open Play
     elif ofensywa_widok == t("att_opt3"):
         st.subheader("Open Play xG" if selected_lang == "EN" else "Kreacja sytuacji z gry otwartej (Open Play xG)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xG_OP_na_mecz", title_chart="Open Play xG Rankings",
+            df=att_team_stats, col_name="xG_OP_na_mecz", title_chart="Open Play xG Rankings",
             title_paper="Open Play xG Rankings", value_header="xG OP / 90", color_scale="Greens"
         )
-        render_metric_trend_chart(matches_df, team_stats, "xG_OP_For", "xG_OP_na_mecz", "Open Play xG", "xG OP")
+        render_metric_trend_chart(att_matches, att_team_stats, "xG_OP_For", "xG_OP_na_mecz", "Open Play xG", "xG OP")
 
     # 4. xG Set Play
     elif ofensywa_widok == t("att_opt4"):
         st.subheader("Set Play xG" if selected_lang == "EN" else "Groźność po stałych fragmentach gry (Set Play xG)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xG_SP_na_mecz", title_chart="Set Play xG Rankings",
+            df=att_team_stats, col_name="xG_SP_na_mecz", title_chart="Set Play xG Rankings",
             title_paper="Set Play xG Rankings", value_header="SP xG / 90", color_scale="Oranges"
         )
-        render_metric_trend_chart(matches_df, team_stats, "xG_SP_For", "xG_SP_na_mecz", "Set Play xG", "SP xG")
+        render_metric_trend_chart(att_matches, att_team_stats, "xG_SP_For", "xG_SP_na_mecz", "Set Play xG", "SP xG")
 
     # 5. npxG
     elif ofensywa_widok == t("att_opt5"):
         st.subheader("Non-Penalty xG" if selected_lang == "EN" else "Czyste zagrożenie bez rzutów karnych (Non-Penalty xG)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="npxG_na_mecz", title_chart="Non-Penalty xG Rankings",
+            df=att_team_stats, col_name="npxG_na_mecz", title_chart="Non-Penalty xG Rankings",
             title_paper="Non-Penalty xG Rankings", value_header="npxG / 90", color_scale="Purples"
         )
-        render_metric_trend_chart(matches_df, team_stats, "npxG_For", "npxG_na_mecz", "Non-Penalty xG", "npxG")
+        render_metric_trend_chart(att_matches, att_team_stats, "npxG_For", "npxG_na_mecz", "Non-Penalty xG", "npxG")
 
     # 6. xGOT
     elif ofensywa_widok == t("att_opt6"):
         st.subheader("Expected Goals on Target (xGOT)" if selected_lang == "EN" else "Jakość uderzeń zmierzających w światło bramki (xGOT)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xGOT_na_mecz", title_chart="Expected Goals on Target (xGOT) Rankings",
+            df=att_team_stats, col_name="xGOT_na_mecz", title_chart="Expected Goals on Target (xGOT) Rankings",
             title_paper="xGOT Rankings", value_header="xGOT / 90", color_scale="Tealgrn"
         )
-        render_metric_trend_chart(matches_df, team_stats, "xGOT_For", "xGOT_na_mecz", "xGOT on Target", "xGOT")
+        render_metric_trend_chart(att_matches, att_team_stats, "xGOT_For", "xGOT_na_mecz", "xGOT on Target", "xGOT")
 
     # 7. xG / Shot
     elif ofensywa_widok == t("att_opt7"):
         st.subheader("Expected Goals per Shot" if selected_lang == "EN" else "Średnia jakość pojedynczego strzału (xG / Shot)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xG_na_strzal", title_chart="Expected Goals per Shot (xG/Shot) Rankings",
+            df=att_team_stats, col_name="xG_na_strzal", title_chart="Expected Goals per Shot (xG/Shot) Rankings",
             title_paper="xG per Shot Rankings", value_header="xG / Shot", color_scale="Viridis"
         )
-        # Obliczenie xG / Shot w locie na mecz
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = att_matches.copy()
         matches_df_temp["xG_Shot_Match"] = (matches_df_temp["xG_For"] / matches_df_temp["Shots"]).fillna(0).round(3)
-        render_metric_trend_chart(matches_df_temp, team_stats, "xG_Shot_Match", "xG_na_strzal", "xG / Shot", "xG / Shot")
+        render_metric_trend_chart(matches_df_temp, att_team_stats, "xG_Shot_Match", "xG_na_strzal", "xG / Shot", "xG / Shot")
 
     # 8. xG / Goal
     elif ofensywa_widok == t("att_opt8"):
         st.subheader("xG Needed per Goal" if selected_lang == "EN" else "Ile xG potrzebuje drużyna, by zdobyć 1 bramkę?")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="xG_na_gola", title_chart="xG Needed per Goal Rankings",
+            df=att_team_stats, col_name="xG_na_gola", title_chart="xG Needed per Goal Rankings",
             title_paper="xG / Goal Rankings", value_header="xG / 1 Gol" if selected_lang == "PL" else "xG / 1 Goal",
             color_scale="RdYlGn_r", sort_asc=False
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = att_matches.copy()
         matches_df_temp["xG_Goal_Match"] = matches_df_temp.apply(lambda r: round(r["xG_For"] / r["Goals_For"], 2) if r["Goals_For"] > 0 else 0.0, axis=1)
-        render_metric_trend_chart(matches_df_temp, team_stats, "xG_Goal_Match", "xG_na_gola", "xG / Goal", "xG / Gol")
+        render_metric_trend_chart(matches_df_temp, att_team_stats, "xG_Goal_Match", "xG_na_gola", "xG / Goal", "xG / Gol")
 
     # 9. SoT / Goal
     elif ofensywa_widok == t("att_opt9"):
         st.subheader("Shots on Target per Goal" if selected_lang == "EN" else "Zabójcza precyzja: Ile celnych strzałów (SoT) potrzeba na 1 bramkę?")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Celne_na_gola", title_chart="Shots on Target Needed per Goal",
+            df=att_team_stats, col_name="Celne_na_gola", title_chart="Shots on Target Needed per Goal",
             title_paper="SoT / Goal Rankings", value_header="SoT / Goal" if selected_lang == "EN" else "SoT / 1 Gol",
             color_scale="RdYlGn_r", sort_asc=True
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = att_matches.copy()
         matches_df_temp["SoT_Goal_Match"] = matches_df_temp.apply(lambda r: round(r["Shots_On_Target"] / r["Goals_For"], 2) if r["Goals_For"] > 0 else 0.0, axis=1)
-        render_metric_trend_chart(matches_df_temp, team_stats, "SoT_Goal_Match", "Celne_na_gola", "Celne na gola (SoT/Goal)", "SoT / Gol")
+        render_metric_trend_chart(matches_df_temp, att_team_stats, "SoT_Goal_Match", "Celne_na_gola", "Celne na gola (SoT/Goal)", "SoT / Gol")
 
     # 10. Gole - xG
     elif ofensywa_widok == t("att_opt10"):
         st.subheader("Finishing Over/Underperformance (Goals - xG)" if selected_lang == "EN" else "Przestrzelone okazje czy genialni napastnicy? (Zdobyte bramki - Suma xG)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Gole_minus_xG", title_chart="Finishing Overperformance (Goals - xG)",
+            df=att_team_stats, col_name="Gole_minus_xG", title_chart="Finishing Overperformance (Goals - xG)",
             title_paper="Goals - xG Rankings" if selected_lang == "EN" else "Gole - xG Rankings",
             value_header="Goals - xG" if selected_lang == "EN" else "Gole - xG",
             color_scale="RdYlGn", sort_asc=False
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = att_matches.copy()
         matches_df_temp["Delta_xG_Match"] = (matches_df_temp["Goals_For"] - matches_df_temp["xG_For"]).round(2)
-        render_metric_trend_chart(matches_df_temp, team_stats, "Delta_xG_Match", "Gole_na_mecz", "Gole - xG (Delta meczowa)", "Delta")
+        render_metric_trend_chart(matches_df_temp, att_team_stats, "Delta_xG_Match", "Gole_na_mecz", "Gole - xG (Delta meczowa)", "Delta")
 
-    
-    
-    
     # 11. Box Shots
     elif ofensywa_widok == t("att_opt11"):
         st.subheader("Shots Inside Box" if selected_lang == "EN" else "Obecność w szesnastce: Średnia strzałów z pola karnego")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Strzaly_z_pola_karnego", title_chart="Shots Inside Box per Match",
+            df=att_team_stats, col_name="Strzaly_z_pola_karnego", title_chart="Shots Inside Box per Match",
             title_paper="Shots Inside Box Rankings", value_header="Box Shots / 90" if selected_lang == "EN" else "Strzały w polu / 90",
             color_scale="Blues", sort_asc=False
         )
-        render_metric_trend_chart(matches_df, team_stats, "Box_Shots", "Strzaly_z_pola_karnego", "Strzały z pola karnego", "Strzały")
+        render_metric_trend_chart(att_matches, att_team_stats, "Box_Shots", "Strzaly_z_pola_karnego", "Strzały z pola karnego", "Strzały")
 
     # 12. Outside Box Shots
     elif ofensywa_widok == t("att_opt12"):
         st.subheader("Shots Outside Box (Long Range)" if selected_lang == "EN" else "Średnia strzałów zza pola karnego")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Strzaly_zza_pola_karnego", title_chart="Shots Outside Box per Match",
+            df=att_team_stats, col_name="Strzaly_zza_pola_karnego", title_chart="Shots Outside Box per Match",
             title_paper="Shots Outside Box Rankings", value_header="Outside Shots / 90" if selected_lang == "EN" else "Strzały z dystansu / 90",
             color_scale="Purples", sort_asc=False
         )
-        render_metric_trend_chart(matches_df, team_stats, "Outside_Box_Shots", "Strzaly_zza_pola_karnego", "Strzały zza pola karnego", "Strzały")
+        render_metric_trend_chart(att_matches, att_team_stats, "Outside_Box_Shots", "Strzaly_zza_pola_karnego", "Strzały zza pola karnego", "Strzały")
 
     # 13. Rozkład xG: Open Play vs Set Play
     elif ofensywa_widok == t("att_opt13"):
         st.subheader("xG Breakdown: Open Play vs Set Play" if selected_lang == "EN" else "Struktura kreowania sytuacji: Z gry vs Stałe fragmenty")
-        dist_df = team_stats.copy()
+        dist_df = att_team_stats.copy()
         dist_df["Karne_Inne_xG"] = (dist_df["xG_na_mecz"] - dist_df["xG_OP_na_mecz"] - dist_df["xG_SP_na_mecz"]).clip(lower=0).round(2)
         dist_df = dist_df.sort_values(by="xG_na_mecz", ascending=True).reset_index(drop=True)
         
@@ -1957,19 +1963,19 @@ with tab_ofensywa:
         fig_dist.add_trace(go.Bar(y=dist_df["Team"], x=dist_df["Karne_Inne_xG"], name="Penalties / Other" if selected_lang == "EN" else "Karne / Inne", orientation='h', marker=dict(color="#94A3B8")))
         fig_dist.update_layout(barmode='stack', height=620, template="simple_white", paper_bgcolor="#FFFFFF", plot_bgcolor="#F8FAFC", title=dict(text="<b>xG Breakdown</b>", x=0.04, y=0.96, font=dict(color="#0F172A")), xaxis=dict(title="xG / 90"), yaxis=dict(tickfont=dict(color="#0F172A")), margin=dict(l=120, r=30, t=65, b=40))
         st.plotly_chart(fig_dist, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "xG_OP_For", "xG_OP_na_mecz", "Open Play xG", "xG OP")
+        render_metric_trend_chart(att_matches, att_team_stats, "xG_OP_For", "xG_OP_na_mecz", "Open Play xG", "xG OP")
 
     # 14. Celność strzałów
     elif ofensywa_widok == t("att_opt14"):
         st.subheader("🎯 Shot Accuracy (%)" if selected_lang == "EN" else "🎯 Celność Strzałów (Shot Accuracy %)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Celnosc_strzalow_proc", title_chart="Shot Accuracy %",
+            df=att_team_stats, col_name="Celnosc_strzalow_proc", title_chart="Shot Accuracy %",
             title_paper="Shot Accuracy Rankings", value_header="Accuracy %" if selected_lang == "EN" else "Celność %",
             color_scale="Blues", sort_asc=False
         )
-        matches_df_temp = matches_df.copy()
+        matches_df_temp = att_matches.copy()
         matches_df_temp["Shot_Acc_Match"] = ((matches_df_temp["Shots_On_Target"] / matches_df_temp["Shots"]) * 100).fillna(0).round(1)
-        render_metric_trend_chart(matches_df_temp, team_stats, "Shot_Acc_Match", "Celnosc_strzalow_proc", "Celność Strzałów (%)", "Celność %")
+        render_metric_trend_chart(matches_df_temp, att_team_stats, "Shot_Acc_Match", "Celnosc_strzalow_proc", "Celność Strzałów (%)", "Celność %")
 
     # 15. Big Chances
     elif ofensywa_widok == t("att_opt15"):
@@ -1978,61 +1984,62 @@ with tab_ofensywa:
         with col_bc1:
             st.markdown("##### " + ("Big Chances Created / 90" if selected_lang == "EN" else "Wykreowane Wielkie Szanse (Średnia / Mecz)"))
             fig_bc = go.Figure(go.Bar(
-                x=team_stats.sort_values(by="Big_Chances", ascending=False)["Big_Chances"],
-                y=team_stats.sort_values(by="Big_Chances", ascending=False)["Team"],
-                orientation='h', marker_color="#10B981", text=[f"{v:.2f}" for v in team_stats.sort_values(by="Big_Chances", ascending=False)["Big_Chances"]], textposition="outside"
+                x=att_team_stats.sort_values(by="Big_Chances", ascending=False)["Big_Chances"],
+                y=att_team_stats.sort_values(by="Big_Chances", ascending=False)["Team"],
+                orientation='h', marker_color="#10B981", text=[f"{v:.2f}" for v in att_team_stats.sort_values(by="Big_Chances", ascending=False)["Big_Chances"]], textposition="outside"
             ))
             fig_bc.update_layout(height=520, template="simple_white", yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig_bc, use_container_width=True)
         with col_bc2:
             st.markdown("##### " + ("Big Chances Missed / 90" if selected_lang == "EN" else "Zmarnowane Wielkie Szanse (Średnia / Mecz)"))
             fig_bcm = go.Figure(go.Bar(
-                x=team_stats.sort_values(by="Big_Chances_Missed", ascending=False)["Big_Chances_Missed"],
-                y=team_stats.sort_values(by="Big_Chances_Missed", ascending=False)["Team"],
-                orientation='h', marker_color="#EF4444", text=[f"{v:.2f}" for v in team_stats.sort_values(by="Big_Chances_Missed", ascending=False)["Big_Chances_Missed"]], textposition="outside"
+                x=att_team_stats.sort_values(by="Big_Chances_Missed", ascending=False)["Big_Chances_Missed"],
+                y=att_team_stats.sort_values(by="Big_Chances_Missed", ascending=False)["Team"],
+                orientation='h', marker_color="#EF4444", text=[f"{v:.2f}" for v in att_team_stats.sort_values(by="Big_Chances_Missed", ascending=False)["Big_Chances_Missed"]], textposition="outside"
             ))
             fig_bcm.update_layout(height=520, template="simple_white", yaxis=dict(autorange="reversed"))
             st.plotly_chart(fig_bcm, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "Big_Chances", "Big_Chances", "Big Chances (Wielkie Szanse)", "Szanse")
+        render_metric_trend_chart(att_matches, att_team_stats, "Big_Chances", "Big_Chances", "Big Chances (Wielkie Szanse)", "Szanse")
 
     # 16. Matryca Skuteczności
     elif ofensywa_widok == t("att_opt16"):
         st.subheader("Finishing Matrix: xG vs xG per Goal" if selected_lang == "EN" else "Matryca Skuteczności: Wolumen kreacji vs Efektywność wykończenia")
-        avg_xg = team_stats["xG_na_mecz"].mean()
-        avg_xg_per_goal = team_stats["xG_na_gola"].mean()
+        avg_xg = att_team_stats["xG_na_mecz"].mean()
+        avg_xg_per_goal = att_team_stats["xG_na_gola"].mean()
         fig_matrix = go.Figure()
         fig_matrix.add_vline(x=avg_xg, line_dash="dash", line_color="#475569")
         fig_matrix.add_hline(y=avg_xg_per_goal, line_dash="dash", line_color="#475569")
-        for _, row in team_stats.iterrows():
+        for _, row in att_team_stats.iterrows():
             fig_matrix.add_trace(go.Scatter(
                 x=[row["xG_na_mecz"]], y=[row["xG_na_gola"]], mode="markers+text", text=[row["Team"]], textposition="top center",
                 marker=dict(size=12, color="#38BDF8"), showlegend=False
             ))
         fig_matrix.update_layout(height=600, template="plotly_dark", xaxis=dict(title="xG / 90"), yaxis=dict(title="xG / Goal", autorange="reversed"))
         st.plotly_chart(fig_matrix, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "xG_For", "xG_na_mecz", "xG na mecz", "xG")
+        render_metric_trend_chart(att_matches, att_team_stats, "xG_For", "xG_na_mecz", "xG na mecz", "xG")
 
     # 17. xG vs xGOT
     elif ofensywa_widok == t("att_opt17"):
         st.subheader("Shot Creation (xG) vs Shot Execution (xGOT)" if selected_lang == "EN" else "Relacja xG vs xGOT (Jakość kreacji vs Strzału)")
-        fig_rel = px.scatter(team_stats, x="xG_na_mecz", y="xGOT_na_mecz", text="Team", template="plotly_dark", height=580)
+        fig_rel = px.scatter(att_team_stats, x="xG_na_mecz", y="xGOT_na_mecz", text="Team", template="plotly_dark", height=580)
         fig_rel.update_traces(textposition="top center", marker=dict(size=12, color="#10B981"))
         st.plotly_chart(fig_rel, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "xGOT_For", "xGOT_na_mecz", "xGOT (Strzały w bramkę)", "xGOT")
+        render_metric_trend_chart(att_matches, att_team_stats, "xGOT_For", "xGOT_na_mecz", "xGOT (Strzały w bramkę)", "xGOT")
 
     # 18. Kontakty vs Strzały
     elif ofensywa_widok == t("att_opt18"):
         st.subheader("Box Efficiency: Touches in Box vs Shots" if selected_lang == "EN" else "Efektywność w szesnastce: Kontakty vs Strzały")
-        fig_box = px.scatter(team_stats, x="Kontakty_w_polu_karnym", y="Strzaly_z_pola_karnego", text="Team", template="plotly_dark", height=580)
+        fig_box = px.scatter(att_team_stats, x="Kontakty_w_polu_karnym", y="Strzaly_z_pola_karnego", text="Team", template="plotly_dark", height=580)
         fig_box.update_traces(textposition="top center", marker=dict(size=12, color="#38BDF8"))
         st.plotly_chart(fig_box, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "Box_Touches", "Box_Touches_Mean", "Kontakty w polu karnym", "Kontakty")
+        render_metric_trend_chart(att_matches, att_team_stats, "Box_Touches", "Box_Touches_Mean", "Kontakty w polu karnym", "Kontakty")
 
     # 19. Strzały potrzebne na gola
     elif ofensywa_widok == t("att_opt19"):
         st.subheader(t("shots_needed_goal"))
-        eff_df = team_stats.sort_values(by="Strzaly_na_gola", ascending=True).copy().reset_index(drop=True)
-        avg_shots_per_goal = (team_stats["Strzaly_na_mecz"].sum() / team_stats["Gole_na_mecz"].sum())
+        eff_df = att_team_stats.sort_values(by="Strzaly_na_gola", ascending=True).copy().reset_index(drop=True)
+        sum_goles = att_team_stats["Gole_na_mecz"].sum()
+        avg_shots_per_goal = (att_team_stats["Strzaly_na_mecz"].sum() / sum_goles) if sum_goles > 0 else 0.0
         
         fig_eff = go.Figure()
         fig_eff.add_trace(go.Bar(
@@ -2054,15 +2061,15 @@ with tab_ofensywa:
             margin=dict(l=120, r=40, t=55, b=55)
         )
         st.plotly_chart(fig_eff, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "Shots", "Strzaly_na_mecz", "Oddane Strzały", "Strzały")
+        render_metric_trend_chart(att_matches, att_team_stats, "Shots", "Strzaly_na_mecz", "Oddane Strzały", "Strzały")
 
     # 20. xGOT vs Bramki
     elif ofensywa_widok == t("att_opt20"):
         st.subheader("Goals vs xGOT (Finishing Overperformance)" if selected_lang == "EN" else "xGOT vs Bramki zdobyte (Over/Underperformance)")
-        fig_xgot = px.scatter(team_stats, x="xGOT_Suma", y="Gole_Strzelone", text="Team", template="plotly_dark", height=560)
+        fig_xgot = px.scatter(att_team_stats, x="xGOT_Suma", y="Gole_Strzelone", text="Team", template="plotly_dark", height=560)
         fig_xgot.update_traces(textposition="top center", marker=dict(size=12, color="#AF7AC5"))
         st.plotly_chart(fig_xgot, use_container_width=True)
-        render_metric_trend_chart(matches_df, team_stats, "Goals_For", "Gole_na_mecz", "Bramki Zdobyte", "Gole")
+        render_metric_trend_chart(att_matches, att_team_stats, "Goals_For", "Gole_na_mecz", "Bramki Zdobyte", "Gole")
 
     # 21. Total Shots
     elif ofensywa_widok == t("att_opt21"):
@@ -2072,9 +2079,8 @@ with tab_ofensywa:
             if selected_lang == "EN" else
             "Zestawienie drużyn generujących największy wolumen strzałów na mecz wraz z analizą trendu w poszczególnych kolejkach."
         )
-        
         render_metric_bar_and_paper(
-            df=team_stats, 
+            df=att_team_stats, 
             col_name="Strzaly_na_mecz", 
             title_chart="Total Shots per Match Rankings",
             title_paper="Total Shots Rankings", 
@@ -2082,10 +2088,9 @@ with tab_ofensywa:
             color_scale="Blues", 
             sort_asc=False
         )
-        
         render_metric_trend_chart(
-            matches_df=matches_df, 
-            team_stats=team_stats, 
+            matches_df=att_matches, 
+            team_stats=att_team_stats, 
             match_col="Shots", 
             avg_col="Strzaly_na_mecz", 
             metric_label="Oddane Strzały" if selected_lang == "PL" else "Total Shots", 
