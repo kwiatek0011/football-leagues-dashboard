@@ -5870,7 +5870,7 @@ with tab_zaleznosci:
 
     # Atak czy Obrona
     st.markdown("---")
-    st.subheader("⚖️ Attack or Defense: What Drives Wins More?" if selected_lang == "EN" else "⚖️ Atak czy Obrona? Co daje więcej wygranych?")
+    st.subheader(" Attack or Defense: What Drives Wins More?" if selected_lang == "EN" else " Atak czy Obrona? Co daje więcej wygranych?")
     st.caption("Inspect Pearson correlations with win rates across the league or focus on a specific team." if selected_lang == "EN" else "Sprawdź zależność w skali ligi lub profil konkretnej drużyny.")
 
     r_gf_pts = team_stats["Gole_na_mecz"].corr(team_stats["Punkty"])
