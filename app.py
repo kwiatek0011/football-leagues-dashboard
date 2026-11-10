@@ -192,6 +192,7 @@ st.set_page_config(page_title="Ekstraklasa Team Analytics", layout="wide")
 def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
     df = pd.read_excel(file_path)
     df.columns = [str(c).strip() for c in df.columns]
+    m_per_round = 10 if any(k in file_path for k in ["Premier", "La Liga", "Serie A"]) else 9
     
     def get_col(row, *candidates):
         for c in candidates:
@@ -217,7 +218,8 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
         return 0.0
 
     records = []
-    for _, row in df.iterrows():
+    for match_idx, (_, row) in enumerate(df.iterrows()):
+        m_round = (match_idx // m_per_round) + 1
         pts_h = 3 if row["home_goals"] > row["away_goals"] else (1 if row["home_goals"] == row["away_goals"] else 0)
         pts_a = 3 if row["away_goals"] > row["home_goals"] else (1 if row["away_goals"] == row["home_goals"] else 0)
 
@@ -298,6 +300,7 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
 
         # Rekord gospodarza (Home)
         records.append({
+            "Kolejka": m_round,
             "Team": row["home_team"],
             "Opponent": row["away_team"],
             "Venue": "Home",
@@ -360,10 +363,12 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
             "Yellow_Cards": yellows_h, "Yellow_Cards_Against": yellows_a,
             "Red_Cards": reds_h, "Red_Cards_Against": reds_a,
             "Duels_Total": duels_tot_h, "Duels_Total_Against": duels_tot_a,
+            
         })
         
         # Rekord gościa (Away)
         records.append({
+            "Kolejka": m_round,
             "Team": row["away_team"],
             "Opponent": row["home_team"],
             "Venue": "Away",
@@ -577,6 +582,118 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
     )
     
     return matches_df, team_stats
+
+def compute_team_stats(matches_subset):
+    """Przelicza wskaźniki zespołowe dla dowolnego wycinka meczów (np. 1-4 kolejka)."""
+    t_stats = matches_subset.groupby("Team").agg(
+        Mecze=("Points", "count"),
+        Punkty=("Points", "sum"),
+        xPunkty=("xPoints", "sum"),
+        Gole_Strzelone=("Goals_For", "sum"),
+        Gole_Stracone=("Goals_Against", "sum"),
+        Gole_na_mecz=("Goals_For", "mean"),
+        Gole_stracone_na_mecz=("Goals_Against", "mean"),
+        xG_na_mecz=("xG_For", "mean"),
+        xGA_na_mecz=("xG_Against", "mean"),
+        xG_OP_na_mecz=("xG_OP_For", "mean"),
+        xGA_OP_na_mecz=("xG_OP_Against", "mean"),
+        xG_SP_na_mecz=("xG_SP_For", "mean"),
+        xGA_SP_na_mecz=("xG_SP_Against", "mean"),
+        npxG_na_mecz=("npxG_For", "mean"),
+        npxGA_na_mecz=("npxG_Against", "mean"),
+        xGOT_na_mecz=("xGOT_For", "mean"),
+        xAGOT_na_mecz=("xGOT_Against", "mean"),
+        xG_Suma=("xG_For", "sum"),
+        xGA_Suma=("xG_Against", "sum"),
+        xGOT_Suma=("xGOT_For", "sum"),
+        Posiadanie=("Possession", "mean"),
+        Podania_ogolem=("Passes_Total", "mean"),
+        Passes_Total_Sum=("Passes_Total", "sum"),
+        Passes_Total_Against_Mean=("Passes_Total_Against", "mean"),
+        Passes_Own_Half_Mean=("Passes_Own_Half", "mean"),
+        Passes_Own_Half_Sum=("Passes_Own_Half", "sum"),
+        Passes_Own_Half_Against_Mean=("Passes_Own_Half_Against", "mean"),
+        Passes_Opp_Half_Mean=("Passes_Opp_Half", "mean"),
+        Passes_Opp_Half_Sum=("Passes_Opp_Half", "sum"),
+        Passes_Opp_Half_Against_Mean=("Passes_Opp_Half_Against", "mean"),
+        Podania_celne=("Passes_Acc", "mean"),
+        Strzaly_na_mecz=("Shots", "mean"),
+        Shots_Sum=("Shots", "sum"),
+        Celne_strzaly=("Shots_On_Target", "mean"),
+        Shots_On_Target_Sum=("Shots_On_Target", "sum"),
+        Shots_Off_Target_Mean=("Shots_Off_Target", "mean"),
+        Shots_Off_Target_Sum=("Shots_Off_Target", "sum"),
+        Blocked_Shots_Mean=("Blocked_Shots", "mean"),
+        Blocked_Shots_Sum=("Blocked_Shots", "sum"),
+        Big_Chances=("Big_Chances", "mean"),
+        Kontakty_w_polu_karnym=("Box_Touches", "mean"),
+        Box_Touches_Mean=("Box_Touches", "mean"),
+        Box_Touches_Against_Mean=("Box_Touches_Against", "mean"),
+        Strzaly_z_pola_karnego=("Box_Shots", "mean"),
+        Rzuty_Rozne=("Corners", "mean"),
+        Odbiory=("Tackles", "mean"),
+        Przejecia=("Interceptions", "mean"),
+        Pojedynki_Wygrane=("Duels_Won", "mean"),
+        Big_Chances_Missed=("Big_Chances_Missed", "mean"),
+        Big_Chances_Missed_Suma=("Big_Chances_Missed", "sum"),
+        Big_Chances_Suma=("Big_Chances", "sum"),
+        Possession_Mean=("Possession", "mean"),
+        Goals_For_Sum=("Goals_For", "sum"),
+        Goals_Against_Sum=("Goals_Against", "sum"),
+        Long_Balls_Mean=("Long_Balls", "mean"),
+        Long_Balls_Sum=("Long_Balls", "sum"),
+        Long_Balls_Against_Mean=("Long_Balls_Against", "mean"),
+        Accurate_Crosses_Mean=("Accurate_Crosses", "mean"),
+        Accurate_Crosses_Sum=("Accurate_Crosses", "sum"),
+        Offsides_Mean=("Offsides", "mean"),
+        Offsides_Sum=("Offsides", "sum"),
+        Keeper_Saves_Mean=("Keeper_Saves", "mean"),
+        Keeper_Saves_Sum=("Keeper_Saves", "sum"),
+        Keeper_Saves_Against_Mean=("Keeper_Saves_Against", "mean"),
+        Clean_Sheets=("Clean_Sheet", "sum"),
+        Shots_Against_Mean=("Shots_Against", "mean"),
+        Shots_On_Target_Against_Mean=("Shots_On_Target_Against", "mean"),
+        Box_Shots_Against_Mean=("Box_Shots_Against", "mean"),
+        Outside_Box_Shots_Against_Mean=("Outside_Box_Shots_Against", "mean"),
+        Big_Chances_Against_Mean=("Big_Chances_Against", "mean"),
+        Wygrane=("Wygrana", "sum"),
+        Win_Rate=("Wygrana", lambda s: round(s.mean() * 100, 1)),
+        Clearances_Mean=("Clearances", "mean"),
+        Blocks_Mean=("Blocks", "mean"),
+        Fouls_Mean=("Fouls", "mean"),
+        Fouls_Against_Mean=("Fouls_Against", "mean"),
+        Dribbles_Mean=("Successful_Dribbles", "mean"),
+        Woodwork_Mean=("Hit_Woodwork", "mean"),
+        Woodwork_Sum=("Hit_Woodwork", "sum"),
+        Yellow_Cards_Mean=("Yellow_Cards", "mean"),
+        Yellow_Cards_Sum=("Yellow_Cards", "sum"),
+        Red_Cards_Sum=("Red_Cards", "sum"),
+        Throws_Mean=("Throws", "mean"),
+        Ground_Duels_Won_Mean=("Ground_Duels_Won", "mean"),
+        Aerial_Duels_Won_Mean=("Aerial_Duels_Won", "mean"),
+        Corners_Against_Mean=("Corners_Against", "mean"),
+        Red_Cards_Mean=("Red_Cards", "mean"),
+    ).reset_index()
+
+    t_stats["Bilans_Bramkowy"] = t_stats["Gole_Strzelone"] - t_stats["Gole_Stracone"]
+    t_stats["Bilans_xG"] = t_stats["xG_na_mecz"] - t_stats["xGA_na_mecz"]
+    t_stats["Bilans_xG_Suma"] = (t_stats["xG_Suma"] - t_stats["xGA_Suma"]).round(2)
+    t_stats["Strzaly_na_gola"] = t_stats.apply(lambda r: round(r["Strzaly_na_mecz"] / r["Gole_na_mecz"], 2) if r["Gole_na_mecz"] > 0 else 0.0, axis=1)
+    t_stats["Konwersja_proc"] = t_stats.apply(lambda r: round((r["Gole_na_mecz"] / r["Strzaly_na_mecz"]) * 100, 1) if r["Strzaly_na_mecz"] > 0 else 0.0, axis=1)
+    t_stats["xG_na_strzal"] = t_stats.apply(lambda r: round(r["xG_na_mecz"] / r["Strzaly_na_mecz"], 3) if r["Strzaly_na_mecz"] > 0 else 0.0, axis=1)
+    t_stats["xG_na_gola"] = t_stats.apply(lambda r: round(r["xG_na_mecz"] / r["Gole_na_mecz"], 2) if r["Gole_na_mecz"] > 0 else 0.0, axis=1)
+    t_stats["Celne_na_gola"] = t_stats.apply(lambda r: round(r["Celne_strzaly"] / r["Gole_na_mecz"], 2) if r["Gole_na_mecz"] > 0 else 0.0, axis=1)
+    t_stats["Gole_minus_xG"] = (t_stats["Gole_Strzelone"] - t_stats["xG_Suma"]).round(2)
+    t_stats["Strzaly_zza_pola_karnego"] = (t_stats["Strzaly_na_mecz"] - t_stats["Strzaly_z_pola_karnego"]).round(2)
+    t_stats["Celnosc_strzalow_proc"] = t_stats.apply(lambda r: round((r["Celne_strzaly"] / r["Strzaly_na_mecz"]) * 100, 2) if r["Strzaly_na_mecz"] > 0 else 0.0, axis=1)
+    t_stats["xGA_na_strzal_rywala"] = t_stats.apply(lambda r: round(r["xGA_na_mecz"] / r["Shots_Against_Mean"], 3) if r["Shots_Against_Mean"] > 0 else 0.0, axis=1)
+    t_stats["xGA_na_gola_straconego"] = t_stats.apply(lambda r: round(r["xGA_na_mecz"] / r["Gole_stracone_na_mecz"], 2) if r["Gole_stracone_na_mecz"] > 0 else 0.0, axis=1)
+    t_stats["Gole_stracone_minus_xGA"] = (t_stats["xGA_Suma"] - t_stats["Gole_Stracone"]).round(2)
+    t_stats["Celnosc_strzalow_rywala_proc"] = t_stats.apply(lambda r: round((r["Shots_On_Target_Against_Mean"] / r["Shots_Against_Mean"]) * 100, 2) if r["Shots_Against_Mean"] > 0 else 0.0, axis=1)
+    t_stats["Podania_na_gola"] = t_stats.apply(lambda r: round(r["Podania_ogolem"] / r["Gole_na_mecz"], 1) if r["Gole_na_mecz"] > 0 else 0.0, axis=1)
+    t_stats["Podania_rywala_na_gola"] = t_stats.apply(lambda r: round(r["Passes_Total_Against_Mean"] / r["Gole_stracone_na_mecz"], 1) if r["Gole_stracone_na_mecz"] > 0 else 0.0, axis=1)
+
+    return t_stats.sort_values(by=["Punkty", "Bilans_Bramkowy", "Gole_Strzelone"], ascending=False).reset_index(drop=True)
 
 @st.cache_data
 def load_and_process_top5_leagues():
@@ -1217,10 +1334,12 @@ def render_metric_trend_chart(matches_df, team_stats, match_col, avg_col, metric
 LEAGUES_CONFIG = {
     "PKO BP Ekstraklasa": {
         "file": "Ekstraklasa 2026-2027.xlsx",
+        "matches_per_round": 9,
         "title": "🇵🇱 Ekstraklasa - Zaawansowany Dashboard Analityczny"
     },
     "Premier League": {
         "file": "Premier League 2026-2027.xlsx",
+        "matches_per_round": 10,
         "title": " Premier League - Zaawansowany Dashboard Analityczny"
     },
     "La Liga": {
@@ -1229,19 +1348,23 @@ LEAGUES_CONFIG = {
     },
     "Serie A": {
         "file": "Serie A 26-27.xlsx",
+        "matches_per_round": 10,
         "title": "Serie A - Zaawansowany Dashboard Analityczny"
     },
     "Bundesliga": {
         "file": "Bundesliga 26-27.xlsx",
+        "matches_per_round": 9,
         "title": "Bundesliga - Zaawansowany Dashboard Analityczny"
     },
     "Ligue 1": {
         "file": "Ligue 1 26-27.xlsx",
+        "matches_per_round": 9,
         "title": "Ligue 1 - Zaawansowany Dashboard Analityczny"
     },
 
     " Top 5 Leagues (Europe)": {
         "file": "TOP5",  # Znacznik informujący o trybie połączonym
+        "matches_per_round": 10,
         "title": " Top 5 Leagues - Zaawansowany Dashboard Analityczny"
     },
 
@@ -1650,6 +1773,44 @@ with tab_ogolne:
 
 
 with tab_ofensywa:
+    # --- KONTROLER KOLEJEK ---
+    max_gw = int(matches_df["Kolejka"].max()) if "Kolejka" in matches_df.columns else 10
+    
+    col_filter_mode, col_filter_val = st.columns([1.6, 2.4])
+    with col_filter_mode:
+        gw_filter_type = st.radio(
+            "Zakres meczów:" if selected_lang == "PL" else "Matchweek Scope:",
+            ["Cały sezon", "Stan po kolejce (1 do N)", "Tylko konkretna kolejka"] if selected_lang == "PL" else ["Full Season", "Up to Matchweek (1 to N)", "Single Matchweek"],
+            index=0,
+            horizontal=True,
+            key="radio_gw_filter_att"
+        )
+    
+    with col_filter_val:
+        if "Stan po kolejce" in gw_filter_type or "Up to" in gw_filter_type:
+            target_gw = st.slider(
+                "Wybierz stan po ilu kolejkach:" if selected_lang == "PL" else "State after matchweek:",
+                min_value=1, max_value=max_gw, value=min(4, max_gw), step=1,
+                key="slider_gw_cum_att"
+            )
+            active_matches = matches_df[matches_df["Kolejka"] <= target_gw].copy()
+            active_team_stats = compute_team_stats(active_matches)
+            st.caption(f"Pokazuję skumulowane statystyki po **{target_gw}** rozegranych kolejkach (kolejki 1–{target_gw}).")
+        elif "Tylko konkretna" in gw_filter_type or "Single" in gw_filter_type:
+            target_gw = st.selectbox(
+                "Wybierz kolejkę:" if selected_lang == "PL" else "Select matchweek:",
+                list(range(1, max_gw + 1)), index=0,
+                key="sb_gw_single_att"
+            )
+            active_matches = matches_df[matches_df["Kolejka"] == target_gw].copy()
+            active_team_stats = compute_team_stats(active_matches)
+            st.caption(f"Pokazuję wyłącznie zdarzenia z **{target_gw}.** kolejki.")
+        else:
+            active_matches = matches_df.copy()
+            active_team_stats = team_stats  # domyślny pełny sezon
+    
+    st.markdown("---")
+
     ofensywa_widok = st.selectbox(
         t("att_select"),
         [t(f"att_opt{i}") for i in range(1, 22)]
