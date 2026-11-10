@@ -2426,11 +2426,49 @@ with tab_defensywa:
         render_metric_trend_chart(def_matches, def_team_stats, "Goals_Against", "Gole_stracone_na_mecz", "Gole Stracone", "Bramki")
 
 # =========================================================================
-# TAB 4: DYSTRYBUCJA I PODANIA (PL / EN)
+# TAB 4: DYSTRYBUCJA I PODANIA (Z OBSŁUGĄ FILTRA KOLEJEK)
 # =========================================================================
 with tab_podania:
     st.header("🎯 Passing, Distribution & Possession Stats" if selected_lang == "EN" else "🎯 Statystyki Podań, Dystrybucji i Posiadania Piłki")
     st.caption("Comprehensive analysis of build-up style, territorial dominance, and opponent metrics." if selected_lang == "EN" else "Kompleksowa analiza kontroli tempa gry: styl budowania akcji, dominacja terytorialna oraz zestawienie z grą rywali.")
+
+    # 1. KONTROLER ZAKRESU KOLEJEK
+    max_gw = int(matches_df["Kolejka"].max()) if ("Kolejka" in matches_df.columns and len(matches_df) > 0) else 10
+    
+    col_filter_mode, col_filter_val = st.columns([1.6, 2.4])
+    with col_filter_mode:
+        gw_filter_type_pass = st.radio(
+            "Zakres meczów:" if selected_lang == "PL" else "Matchweek Scope:",
+            ["Cały sezon", "Stan po kolejce (1 do N)", "Tylko konkretna kolejka"] if selected_lang == "PL" else ["Full Season", "Up to Matchweek (1 to N)", "Single Matchweek"],
+            index=0,
+            horizontal=True,
+            key="radio_gw_filter_pass"
+        )
+    
+    with col_filter_val:
+        if "Stan po kolejce" in gw_filter_type_pass or "Up to" in gw_filter_type_pass:
+            target_gw = st.slider(
+                "Wybierz stan po ilu kolejkach:" if selected_lang == "PL" else "State after matchweek:",
+                min_value=1, max_value=max_gw, value=min(4, max_gw), step=1,
+                key="slider_gw_cum_pass"
+            )
+            pass_matches = matches_df[matches_df["Kolejka"] <= target_gw].copy()
+            pass_team_stats = compute_team_stats(pass_matches)
+            st.caption(f"Pokazuję skumulowane statystyki podań po **{target_gw}** rozegranych kolejkach (kolejki 1–{target_gw}).")
+        elif "Tylko konkretna" in gw_filter_type_pass or "Single" in gw_filter_type_pass:
+            target_gw = st.selectbox(
+                "Wybierz kolejkę:" if selected_lang == "PL" else "Select matchweek:",
+                list(range(1, max_gw + 1)), index=0,
+                key="sb_gw_single_pass"
+            )
+            pass_matches = matches_df[matches_df["Kolejka"] == target_gw].copy()
+            pass_team_stats = compute_team_stats(pass_matches)
+            st.caption(f"Pokazuję wyłącznie zdarzenia z **{target_gw}.** kolejki.")
+        else:
+            pass_matches = matches_df.copy()
+            pass_team_stats = team_stats.copy()
+
+    st.markdown("---")
 
     podania_widok = st.selectbox(
         t("pass_select"),
@@ -2447,7 +2485,7 @@ with tab_podania:
             "Podania_celne", "Passes_Own_Half_Mean", "Passes_Opp_Half_Mean", 
             "Passes_Opp_Half_Against_Mean", "Long_Balls_Mean", "Long_Balls_Against_Mean"
         ]
-        df_p_show = team_stats[t_cols].copy()
+        df_p_show = pass_team_stats[t_cols].copy()
         st.dataframe(
             df_p_show,
             use_container_width=True,
@@ -2471,7 +2509,7 @@ with tab_podania:
     elif podania_widok == t("pass_opt2"):
         st.subheader("Average Ball Possession (%)" if selected_lang == "EN" else "Średnie Posiadanie Piłki w Sezonie (%)")
         render_metric_bar_and_paper(
-            df=team_stats, col_name="Posiadanie", 
+            df=pass_team_stats, col_name="Posiadanie", 
             title_chart="Average Ball Possession (%)",
             title_paper="Possession Rankings", 
             value_header="Possession %" if selected_lang == "EN" else "Posiadanie %", 
@@ -2485,7 +2523,7 @@ with tab_podania:
         sort_mode = st.radio("Ranking sorting criteria:" if selected_lang == "EN" else "Wybierz kryterium rankingu:", sort_opts, horizontal=True)
         col_sort = "Podania_ogolem" if (sort_mode == sort_opts[0]) else "Bilans_Podan"
 
-        df_sorted_p = team_stats.sort_values(by=col_sort, ascending=False).reset_index(drop=True)
+        df_sorted_p = pass_team_stats.sort_values(by=col_sort, ascending=False).reset_index(drop=True)
         fig_p_tot = go.Figure()
         fig_p_tot.add_trace(go.Bar(
             y=df_sorted_p["Team"], x=df_sorted_p["Podania_ogolem"], 
@@ -2514,7 +2552,7 @@ with tab_podania:
         t_header = ("Own Half / 90" if col_sel_p_sub == own_half_opts[0] else "Opp Own Half / 90") if selected_lang == "EN" else ("Własna połowa / 90" if col_sel_p_sub == own_half_opts[0] else "Rywal u siebie / 90")
         
         render_metric_bar_and_paper(
-            df=team_stats, col_name=c_name, 
+            df=pass_team_stats, col_name=c_name, 
             title_chart="Passes in Own Half Rankings",
             title_paper="Own Half Passes", 
             value_header=t_header, 
@@ -2528,7 +2566,7 @@ with tab_podania:
         col_sel_opp = st.radio("Perspective:" if selected_lang == "EN" else "Wybierz perspektywę:", opp_half_opts, horizontal=True)
         if col_sel_opp == opp_half_opts[0]:
             render_metric_bar_and_paper(
-                df=team_stats, col_name="Passes_Opp_Half_Mean", 
+                df=pass_team_stats, col_name="Passes_Opp_Half_Mean", 
                 title_chart="Passes in Opposition Half Rankings",
                 title_paper="Opposition Half Passes", 
                 value_header="Opp Half / 90" if selected_lang == "EN" else "Na połowie rywala / 90", 
@@ -2536,7 +2574,7 @@ with tab_podania:
             )
         else:
             render_metric_bar_and_paper(
-                df=team_stats, col_name="Passes_Opp_Half_Against_Mean", 
+                df=pass_team_stats, col_name="Passes_Opp_Half_Against_Mean", 
                 title_chart="Opponent Passes in Our Half Rankings",
                 title_paper="Opponent Passes in Our Half", 
                 value_header="Opp at Our Half / 90" if selected_lang == "EN" else "Rywal u nas / 90", 
@@ -2550,10 +2588,10 @@ with tab_podania:
         with col_lb1:
             st.markdown("##### " + ("🚀 Team Accurate Long Balls / 90" if selected_lang == "EN" else "🚀 Celne długie piłki własne"))
             fig_lb_w = go.Figure(go.Bar(
-                x=team_stats.sort_values(by="Long_Balls_Mean", ascending=False)["Long_Balls_Mean"],
-                y=team_stats.sort_values(by="Long_Balls_Mean", ascending=False)["Team"],
+                x=pass_team_stats.sort_values(by="Long_Balls_Mean", ascending=False)["Long_Balls_Mean"],
+                y=pass_team_stats.sort_values(by="Long_Balls_Mean", ascending=False)["Team"],
                 orientation='h', marker_color="#F59E0B",
-                text=[f"{v:.1f}" for v in team_stats.sort_values(by="Long_Balls_Mean", ascending=False)["Long_Balls_Mean"]],
+                text=[f"{v:.1f}" for v in pass_team_stats.sort_values(by="Long_Balls_Mean", ascending=False)["Long_Balls_Mean"]],
                 textposition="outside"
             ))
             fig_lb_w.update_layout(height=520, template="simple_white", margin=dict(l=110, r=30, t=30, b=30), yaxis=dict(autorange="reversed"))
@@ -2562,10 +2600,10 @@ with tab_podania:
         with col_lb2:
             st.markdown("##### " + ("🛡️ Opponent Long Balls Conceded / 90" if selected_lang == "EN" else "🛡️ Celne długie piłki zmuszonych do tego rywali"))
             fig_lb_a = go.Figure(go.Bar(
-                x=team_stats.sort_values(by="Long_Balls_Against_Mean", ascending=False)["Long_Balls_Against_Mean"],
-                y=team_stats.sort_values(by="Long_Balls_Against_Mean", ascending=False)["Team"],
+                x=pass_team_stats.sort_values(by="Long_Balls_Against_Mean", ascending=False)["Long_Balls_Against_Mean"],
+                y=pass_team_stats.sort_values(by="Long_Balls_Against_Mean", ascending=False)["Team"],
                 orientation='h', marker_color="#8B5CF6",
-                text=[f"{v:.1f}" for v in team_stats.sort_values(by="Long_Balls_Against_Mean", ascending=False)["Long_Balls_Against_Mean"]],
+                text=[f"{v:.1f}" for v in pass_team_stats.sort_values(by="Long_Balls_Against_Mean", ascending=False)["Long_Balls_Against_Mean"]],
                 textposition="outside"
             ))
             fig_lb_a.update_layout(height=520, template="simple_white", margin=dict(l=110, r=30, t=30, b=30), yaxis=dict(autorange="reversed"))
@@ -2579,7 +2617,7 @@ with tab_podania:
 
         if ppg_perspective == ppg_opts[0]:
             render_metric_bar_and_paper(
-                df=team_stats, col_name="Podania_na_gola",
+                df=pass_team_stats, col_name="Podania_na_gola",
                 title_chart="Passes per Goal Scored",
                 title_paper="Passes / Goal Scored",
                 value_header="Passes / Goal" if selected_lang == "EN" else "Podań na 1 Gola",
@@ -2587,7 +2625,7 @@ with tab_podania:
             )
         else:
             render_metric_bar_and_paper(
-                df=team_stats, col_name="Podania_rywala_na_gola",
+                df=pass_team_stats, col_name="Podania_rywala_na_gola",
                 title_chart="Opponent Passes per Goal",
                 title_paper="Opponent Passes / Goal",
                 value_header="Opp Passes / Goal" if selected_lang == "EN" else "Podań rywala / Gol",
@@ -2597,14 +2635,14 @@ with tab_podania:
     # 8. Matryca Kontroli Terytorialnej
     elif podania_widok == t("pass_opt8"):
         st.subheader("Territorial Dominance Matrix" if selected_lang == "EN" else "Matryca Dominacji Terytorialnej: Gra na połowie rywala vs Obrona własnej połowy")
-        avg_x_pass = team_stats["Passes_Opp_Half_Mean"].mean()
-        avg_y_pass = team_stats["Passes_Opp_Half_Against_Mean"].mean()
+        avg_x_pass = pass_team_stats["Passes_Opp_Half_Mean"].mean()
+        avg_y_pass = pass_team_stats["Passes_Opp_Half_Against_Mean"].mean()
 
         fig_p_matrix = go.Figure()
         fig_p_matrix.add_vline(x=avg_x_pass, line_dash="dash", line_color="#475569")
         fig_p_matrix.add_hline(y=avg_y_pass, line_dash="dash", line_color="#475569")
 
-        for _, row in team_stats.iterrows():
+        for _, row in pass_team_stats.iterrows():
             t_team = row["Team"]
             x_val = row["Passes_Opp_Half_Mean"]
             y_val = row["Passes_Opp_Half_Against_Mean"]
@@ -2635,7 +2673,7 @@ with tab_podania:
     # 9. Profil Drużyny: Wykres mecz po meczu
     elif podania_widok == t("pass_opt9"):
         st.subheader("Match-by-Match Passing Profile" if selected_lang == "EN" else "Dynamika Podań Mecz po Meczu dla Wybranego Zespołu")
-        team_list_pass = sorted(team_stats["Team"].unique().tolist())
+        team_list_pass = sorted(pass_team_stats["Team"].unique().tolist())
         col_sel_p_team, col_sel_metric = st.columns([1.2, 1.2])
         
         stat_types_en = ["Total Passes", "Own Half Passes", "Opponent Half Passes", "Long Balls"]
@@ -2646,7 +2684,7 @@ with tab_podania:
         with col_sel_metric:
             sel_m_pass = st.selectbox("Select Metric Type:" if selected_lang == "EN" else "Wybierz rodzaj statystyki:", stat_types_en if selected_lang == "EN" else stat_types_pl, index=0)
 
-        t_m_df = matches_df[matches_df["Team"] == sel_t_pass].copy().reset_index(drop=True)
+        t_m_df = pass_matches[pass_matches["Team"] == sel_t_pass].copy().reset_index(drop=True)
         t_m_df["Kolejka"] = t_m_df.index + 1
 
         if sel_m_pass in ["Total Passes", "Podania Ogółem"]:
