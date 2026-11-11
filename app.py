@@ -54,6 +54,7 @@ TRANSLATIONS = {
         "att_opt19": "Strzały potrzebne na gola",
         "att_opt20": "xGOT vs Bramki zdobyte (Over/Underperformance)",
         "att_opt21": "Oddane strzały ogółem (Total Shots)",
+        "att_opt22": "Oddane strzały celne (Shots on Target)",
         "def_select": "🛡️ Wybierz moduł analizy defensywnej:",
     "def_opt1": "Tabela Główna Defensywy",
     "def_opt2": "1. Ogólne xGA na mecz (Dopuszczona jakość szans)",
@@ -141,6 +142,7 @@ TRANSLATIONS = {
         "att_opt19": "Shots Needed per Goal",
         "att_opt20": "xGOT vs Real Goals Scored",
         "att_opt21": "Total Shots per Match",
+        "att_opt22": "Shots on Target per Match",
         "def_select": "🛡️ Select defensive analysis module:",
     "def_opt1": "Main Defensive Table",
     "def_opt2": "1. Total Expected Goals Against (xGA / 90)",
@@ -1822,7 +1824,7 @@ with tab_ofensywa:
 
     ofensywa_widok = st.selectbox(
         t("att_select"),
-        [t(f"att_opt{i}") for i in range(1, 22)],
+        [t(f"att_opt{i}") for i in range(1, 23)],
         key="sb_ofensywa_submodules"
     )
     st.markdown("---")
@@ -2095,7 +2097,37 @@ with tab_ofensywa:
             avg_col="Strzaly_na_mecz", 
             metric_label="Oddane Strzały" if selected_lang == "PL" else "Total Shots", 
             yaxis_title="Strzały" if selected_lang == "PL" else "Shots"
+        )
+    # 22. Shots on Target
+    elif ofensywa_widok == t("att_opt22"):
+        st.subheader("Shots on Target per Match" if selected_lang == "EN" else "Oddane strzały celne (Średnia / Mecz)")
+        st.caption(
+            "Ranking of teams with the highest volume of accurate shots directed on target (SoT) along with match-by-match trajectory."
+            if selected_lang == "EN" else
+            "Zestawienie drużyn posyłających najwięcej uderzeń w światło bramki (SoT) na mecz wraz z dynamiką w poszczególnych kolejkach."
+        )
+        
+        render_metric_bar_and_paper(
+            df=att_team_stats, 
+            col_name="Celne_strzaly", 
+            title_chart="Shots on Target per Match Rankings",
+            title_paper="Shots on Target Rankings", 
+            value_header="SoT / 90" if selected_lang == "EN" else "Celne / 90", 
+            color_scale="Blues", 
+            sort_asc=False
+        )
+        
+        render_metric_trend_chart(
+            matches_df=att_matches, 
+            team_stats=att_team_stats, 
+            match_col="Shots_On_Target", 
+            avg_col="Celne_strzaly", 
+            metric_label="Strzały Celne" if selected_lang == "PL" else "Shots on Target", 
+            yaxis_title="Strzały Celne" if selected_lang == "PL" else "SoT"
         )    
+
+
+
 
 # =========================================================================
 # TAB 3: STATYSTYKI DEFENSYWNE (Z OBSŁUGĄ FILTRA KOLEJEK)
