@@ -5738,6 +5738,17 @@ with tab_asystent_ai:
         selected_venue_filter = "Away"
 
     detect_streak = cr_is_streak or any(w in q_norm for w in ["seri", "streak", "z rzedu", "pod rzad", "kolejnych"])
+    # Wykrywanie zapytań o średnie, sumy lub liderów statystyk (z wyłączeniem pytań o listę meczów)
+    q_no_per_match = q_norm.replace("na mecz", "").replace("w meczu", "").replace("co mecz", "")
+    asks_matches_list = any(w in q_no_per_match for w in ["mecze", "meczow", "spotkani", "kiedy", "z kim"])
+    is_stat_question = (
+        not detect_streak
+        and not asks_matches_list
+        and any(w in q_norm for w in [
+            "ile ", "jaka ", "jakie ", "jaki ", "sredni", "suma", "lacznie", "razem",
+            "najwiecej", "najmniej", "najwyzsz", "najnizsz", "statystyk", "bilans", "procent", "%"
+        ])
+    )
     is_longest_query = any(w in q_norm for w in ["najdluzsz", "ile trwala", "ile trwal", "maksymaln", "rekord"])
 
     num_map = {
@@ -5850,6 +5861,99 @@ with tab_asystent_ai:
             else:
                 st.warning(f"Brak serii ({streak_type_label}) o długości co najmniej {streak_target_len} meczów dla wybranego filtra ({venue_label}).")
 
+        # TRYB B: PYTANIA O ŚREDNIE, SUMY I RANKINGI STATYSTYCZNE
+        elif is_stat_question:
+            # 1. Rozpoznanie metryki (z obsługą literówek typu 'strzekla')
+            if any(w in q_norm for w in ["strac", "traci", "wpuszcz", "przeciwko"]) and any(w in q_norm for w in ["gol", "bram"]):
+                m_lbl, m_col, is_pct, lower_better = "Gole stracone", "Goals_Against", False, True
+            elif any(w in q_norm for w in ["gol", "bram", "strzel", "strzekl"]):
+                m_lbl, m_col, is_pct, lower_better = "Gole strzelone", "Goals_For", False, False
+            elif "xga" in q_norm or ("xg" in q_norm and any(w in q_norm for w in ["strac", "dopuszcz"])):
+                m_lbl, m_col, is_pct, lower_better = "Dopuszczone xGA", "xG_Against", False, True
+            elif "xgot" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "xGOT (jakość celnych strzałów)", "xGOT_For", False, False
+            elif "npxg" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "npxG (bez karnych)", "npxG_For", False, False
+            elif "xg" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Wykreowane xG", "xG_For", False, False
+            elif "celn" in q_norm and "strzal" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Strzały celne", "Shots_On_Target", False, False
+            elif any(w in q_norm for w in ["pola karnego", "szesnast"]) and "strzal" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Strzały z pola karnego", "Box_Shots", False, False
+            elif "strzal" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Oddane strzały", "Shots", False, False
+            elif "posiadani" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Posiadanie piłki (%)", "Possession", True, False
+            elif "podan" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Podania ogółem", "Passes_Total", False, False
+            elif "pojedyn" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Wygrane pojedynki", "Duels_Won", False, False
+            elif "wielk" in q_norm or "big chance" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Wielkie szanse (Big Chances)", "Big_Chances", False, False
+            elif "rozn" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Rzuty rożne", "Corners", False, False
+            elif "punkt" in q_norm or "pkt" in q_norm:
+                m_lbl, m_col, is_pct, lower_better = "Zdobyte punkty", "Points", False, False
+            else:
+                m_lbl, m_col, is_pct, lower_better = "Gole strzelone", "Goals_For", False, False
+
+            sub_stat = matches_df.copy()
+            if selected_venue_filter:
+                sub_stat = sub_stat[sub_stat["Venue"] == selected_venue_filter]
+
+            venue_txt = "Dom" if selected_venue_filter == "Home" else ("Wyjazd" if selected_venue_filter == "Away" else "Dom + Wyjazd")
+
+            # Ranking ligowy dla danej metryki
+            rk_df = sub_stat.groupby("Team").agg(
+                Mecze=(m_col, "count"),
+                Srednia=(m_col, "mean"),
+                Suma=(m_col, "sum")
+            ).reset_index().sort_values(by="Srednia", ascending=lower_better).reset_index(drop=True)
+            rk_df.insert(0, "Pozycja", rk_df.index + 1)
+
+            if selected_team_filter and selected_team_filter in rk_df["Team"].values:
+                t_row = rk_df[rk_df["Team"] == selected_team_filter].iloc[0]
+                lg_avg = rk_df["Srednia"].mean()
+                delta_lg = t_row["Srednia"] - lg_avg
+
+                st.subheader(f"Statystyka: {selected_team_filter} — {m_lbl}")
+                st.caption(f"Zakres: **{venue_txt}** | Rozegrane mecze: **{int(t_row['Mecze'])}**")
+
+                c_s1, c_s2, c_s3 = st.columns(3)
+                val_fmt = f"{t_row['Srednia']:.1f}%" if is_pct else f"{t_row['Srednia']:.2f}"
+                delta_fmt = f"{delta_lg:+.1f}% vs liga" if is_pct else f"{delta_lg:+.2f} vs liga"
+                c_s1.metric("Średnia na mecz", val_fmt, delta_fmt, delta_color="inverse" if lower_better else "normal")
+
+                if not is_pct:
+                    c_s2.metric("Suma łącznie", f"{int(round(t_row['Suma']))}" if m_col in ["Goals_For", "Goals_Against", "Shots", "Shots_On_Target", "Box_Shots", "Passes_Total", "Duels_Won", "Big_Chances", "Corners", "Points"] else f"{t_row['Suma']:.2f}")
+                else:
+                    c_s2.metric("Średnia ligowa", f"{lg_avg:.1f}%")
+
+                c_s3.metric("Miejsce w lidze", f"{int(t_row['Pozycja'])} / {len(rk_df)}")
+
+                # Tabela porównawcza z ligą
+                rk_show = rk_df.copy()
+                rk_show["Srednia"] = rk_show["Srednia"].round(2)
+                rk_show["Suma"] = rk_show["Suma"].round(2)
+                rk_show.columns = ["#", "Drużyna", "Mecze", f"{m_lbl} (Śr./mecz)", f"{m_lbl} (Suma)"]
+                if is_pct:
+                    rk_show = rk_show.drop(columns=[f"{m_lbl} (Suma)"])
+                st.dataframe(rk_show, use_container_width=True, hide_index=True)
+
+            else:
+                # Zapytanie ogólne o ligę (np. "kto strzela najwięcej goli na mecz")
+                lg_avg = rk_df["Srednia"].mean()
+                st.subheader(f"Ranking Ligowy: {m_lbl}")
+                st.caption(f"Zakres: **{venue_txt}** | Średnia ligowa: **{lg_avg:.2f}**")
+
+                rk_show = rk_df.copy()
+                rk_show["Srednia"] = rk_show["Srednia"].round(2)
+                rk_show["Suma"] = rk_show["Suma"].round(2)
+                rk_show.columns = ["#", "Drużyna", "Mecze", f"{m_lbl} (Śr./mecz)", f"{m_lbl} (Suma)"]
+                if is_pct:
+                    rk_show = rk_show.drop(columns=[f"{m_lbl} (Suma)"])
+                st.dataframe(rk_show, use_container_width=True, hide_index=True)
+        
         # TRYB B: FILTROWANIE MECZÓW
         else:
             base_matches = matches_df.copy()
