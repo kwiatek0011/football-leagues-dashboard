@@ -5532,617 +5532,454 @@ with tab_analiza_meczu:
         with col_pitch_b:
             st.plotly_chart(fig_pitch_b, use_container_width=True)
 
-# ZAKŁADKA: ASYSTENT AI & ZAAWANSOWANA WYSZUKIWARKA MECZOWA
+# =========================================================================
+# ZAKŁADKA: ASYSTENT AI & ZAAWANSOWANA WYSZUKIWARKA MECZOWA (LLM + JSON)
+# =========================================================================
+import os
+import json
+import difflib
+import requests
+from datetime import datetime
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def parse_query_with_gemini(user_query: str, valid_teams_tuple: tuple, api_key: str) -> dict:
+    """Wysyła zapytanie użytkownika do Gemini 2.5 Flash i wymusza odpowiedź w formacie JSON."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+
+    schema_instructions = f"""
+Jesteś precyzyjnym parserem zapytań piłkarskich. Zamień zapytanie użytkownika na poprawny obiekt JSON (bez znaczników markdown ```json).
+
+DOSTĘPNE DRUŻYNY W TEJ LIDZE:
+{list(valid_teams_tuple)}
+
+DOSTĘPNE KOLUMNY W RAMCE DANYCH MECZOWYCH (matches_df):
+- Gole i punkty: Goals_For, Goals_Against, Points (3=wygrana, 1=remis, 0=porażka), Clean_Sheet (1/0)
+- Expected Goals: xG_For, xG_Against, xG_OP_For, xG_OP_Against, xG_SP_For, xG_SP_Against, npxG_For, npxG_Against, xGOT_For, xGOT_Against
+- Strzały i pole karne: Shots, Shots_Against, Shots_On_Target, Shots_On_Target_Against, Box_Shots, Box_Shots_Against, Outside_Box_Shots, Outside_Box_Shots_Against, Big_Chances, Big_Chances_Against, Box_Touches, Box_Touches_Against
+- Posiadanie i podania: Possession (0-100), Passes_Total, Passes_Total_Against, Passes_Acc, Passes_Acc_Against, Passes_Own_Half, Passes_Own_Half_Against, Passes_Opp_Half, Passes_Opp_Half_Against, Long_Balls, Long_Balls_Against, Accurate_Crosses
+- Pojedynki, obrona i dyscyplina: Duels_Won, Duels_Won_Against, Ground_Duels_Won, Aerial_Duels_Won, Tackles, Interceptions, Clearances, Blocks, Keeper_Saves, Keeper_Saves_Against, Corners, Corners_Against, Offsides, Fouls, Fouls_Against, Yellow_Cards, Red_Cards, Successful_Dribbles
+
+WYMAGANY FORMAT WYJŚCIOWY JSON:
+{{
+  "intent": "filter_matches" | "aggregate_stats" | "streaks",
+  "team": "Dokładna nazwa drużyny z listy powyżej lub null",
+  "opponent": "Dokładna nazwa rywala z listy powyżej lub null",
+  "venue": "Home" | "Away" | null,
+  "result": "win" | "draw" | "loss" | null,
+  "conditions": [
+    {{
+      "col": "Nazwa kolumny z matches_df",
+      "op": "<" | "<=" | ">" | ">=" | "==" | "!=",
+      "compare_to": "value" | "opponent_col",
+      "val": 2.5,
+      "opp_col": "Nazwa kolumny rywala (używane gdy compare_to == 'opponent_col')",
+      "label": "Krótka polska etykieta warunku, np. 'xG < rywal' lub 'xG > 2.5'"
+    }}
+  ],
+  "agg_metric": {{
+    "col": "Nazwa kolumny z matches_df (gdy intent == 'aggregate_stats')",
+    "label": "Polska nazwa metryki, np. 'Gole strzelone'",
+    "is_pct": false,
+    "lower_is_better": false
+  }},
+  "streak": {{
+    "type": "wins" | "losses" | "draws" | "unbeaten" | "winless" | "clean_sheets" | "goals_scored",
+    "min_length": 2,
+    "longest_only": false
+  }},
+  "explanation": "Krótkie (1 zdanie) podsumowanie po polsku, jak zinterpretowano zapytanie"
+}}
+
+ZASADY:
+1. Jeśli użytkownik pyta o listę meczów (np. 'mecze gospodarzy wygrane', 'remisy Wisły Kraków', 'wygrane mimo niższego xG i większej liczby pojedynków'), ustaw intent = "filter_matches".
+2. Jeśli użytkownik pyta o sam wynik (np. 'mecze gospodarzy wygrane'), lista "conditions" MUSI być pusta [].
+3. Jeśli użytkownik pyta o średnią, sumę lub lidera statystyki (np. 'ile goli strzela średnio Wisła Kraków', 'kto ma najwyższe xG'), ustaw intent = "aggregate_stats".
+4. Jeśli użytkownik pyta o serię lub passę (np. 'ile trwała najdłuższa seria zwycięstw', 'serie wygranych u siebie'), ustaw intent = "streaks". Przy pytaniu o 'najdłuższą' ustaw longest_only = true i min_length = 1.
+5. Rozpoznawaj polską odmianę klubów (np. 'wisłę kraków' -> 'Wisła Kraków', 'wieczystą' -> 'Wieczysta Kraków', 'lecha' -> 'Lech Poznań').
+
+ZAPYTANIE UŻYTKOWNIKA: "{user_query}"
+"""
+
+    payload = {
+        "contents": [{"parts": [{"text": schema_instructions}]}],
+        "generationConfig": {
+            "temperature": 0.0,
+            "responseMimeType": "application/json"
+        }
+    }
+
+    resp = requests.post(url, json=payload, timeout=15)
+    resp.raise_for_status()
+    raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    return json.loads(raw_text)
+
+
+def resolve_team_fuzzy(candidate: str, valid_teams: list):
+    """Dopasowuje nazwę zwróconą przez LLM do dokładnej nazwy w DataFrame."""
+    if not candidate:
+        return None
+    if candidate in valid_teams:
+        return candidate
+    matches = difflib.get_close_matches(candidate, valid_teams, n=1, cutoff=0.60)
+    return matches[0] if matches else None
+
+
+def apply_pandas_op(series_a, op: str, target):
+    if op == "<":
+        return series_a < target
+    if op == "<=":
+        return series_a <= target
+    if op == ">":
+        return series_a > target
+    if op == ">=":
+        return series_a >= target
+    if op == "==":
+        return series_a == target
+    if op == "!=":
+        return series_a != target
+    return pd.Series([True] * len(series_a), index=series_a.index)
+
+
+def log_unmatched_query(query_text: str, league_name: str):
+    """Zapisuje zapytania bez wyników do pliku w celu późniejszej analizy."""
+    try:
+        with open("unmatched_queries.txt", "a", encoding="utf-8") as f:
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"[{ts}] [{league_name}] {query_text}\n")
+    except Exception:
+        pass
+
+
 with tab_asystent_ai:
-    st.header(" Inteligentny Asystent Analityczny & Wyszukiwarka Meczowa" if selected_lang == "PL" else " AI Tactical Scout & Advanced Match Query Engine")
+    st.header("Inteligentny Asystent Analityczny AI (LLM Scout)" if selected_lang == "PL" else "AI Tactical Scout Copilot")
     st.caption(
-        "Zadaj dowolne pytanie w języku naturalnym lub skorzystaj z filtrów: badaj serie zwycięstw dom/wyjazd, mecze wygrane pomimo gorszych statystyk (xG, strzały z szesnastki) oraz anomalie."
+        "Zadaj dowolne złożone pytanie w języku naturalnym: łącz wiele warunków (np. wygrane przy niższym xG i poniżej 45% posiadania), badaj serie lub pytaj o średnie statystyczne."
         if selected_lang == "PL" else
-        "Search match data in natural language or use tactical filters: analyze home/away winning streaks, paradox matches won against xG/shot metrics, and statistical anomalies."
+        "Ask complex natural language questions: combine multiple conditions, check streaks, or query team/league statistical averages."
     )
 
-    # Inicjalizacja klucza w sesji (jeśli jeszcze nie istnieje)
+    # Pobranie klucza API z secrets / env lub pola w interfejsie
+    default_api_key = ""
+    try:
+        default_api_key = st.secrets.get("GEMINI_API_KEY", "")
+    except Exception:
+        default_api_key = ""
+    if not default_api_key:
+        default_api_key = os.environ.get("GEMINI_API_KEY", "")
+
+    with st.expander("🔑 Konfiguracja klucza Gemini API (wymagane do trybu AI)", expanded=not bool(default_api_key)):
+        user_api_key = st.text_input(
+            "Wklej klucz Gemini API (darmowy z Google AI Studio):",
+            value=default_api_key,
+            type="password",
+            key="gemini_api_key_input"
+        )
+        if not user_api_key:
+            st.info("Wklej klucz API powyżej, aby aktywować rozumienie dowolnych zapytań przez model językowy.")
+
     if "ai_scout_user_query" not in st.session_state:
         st.session_state["ai_scout_user_query"] = ""
 
-    # Funkcja przypisująca pytanie z kafelków do pola tekstowego
     def set_prompt(prompt_text):
         st.session_state["ai_scout_user_query"] = prompt_text
 
-    # 1. Szybkie kafelki z przykładami zapytań
-    st.markdown("#####  Przykłady zapytań do przetestowania (kliknij, aby uruchomić):")
+    # Szybkie przykłady testujące różne możliwości modelu
+    st.markdown("##### Przykłady zapytań (kliknij, aby przetestować):")
     col_q1, col_q2, col_q3 = st.columns(3)
     with col_q1:
-        if st.button(" Serie zwycięstw u siebie (min. 3 mecze)", on_click=set_prompt, args=("serie zwycięstw u siebie 3 meczowe",), use_container_width=True):
-            pass
-        if st.button(" Serie zwycięstw na wyjeździe (min. 2 mecze)", on_click=set_prompt, args=("serie zwycięstw na wyjeździe 2 meczowe",), use_container_width=True):
-            pass
+        st.button(
+            "Wygrane pomimo niższego xG i mniejszej liczby strzałów w polu",
+            on_click=set_prompt,
+            args=("mecze wygrane pomimo niższego xG i mniejszej liczby strzałów z pola karnego",),
+            use_container_width=True
+        )
+        st.button(
+            "Mecze z xG > 2.5 i posiadaniem poniżej 45%",
+            on_click=set_prompt,
+            args=("mecze z xG powyżej 2.5 i posiadaniem piłki poniżej 45%",),
+            use_container_width=True
+        )
     with col_q2:
-        if st.button(" Wygrane pomimo niższego xG (Smash & Grab)", on_click=set_prompt, args=("mecze wygrane pomimo niższego xg",), use_container_width=True):
-            pass
-        if st.button(" Wygrane pomimo mniejszej liczby strzałów w polu", on_click=set_prompt, args=("mecze wygrane pomimo mniejszej ilości strzałów z pola karnego",), use_container_width=True):
-            pass
+        st.button(
+            "Najdłuższa seria zwycięstw w lidze",
+            on_click=set_prompt,
+            args=("ile trwała najdłuższa seria zwycięstw w lidze",),
+            use_container_width=True
+        )
+        st.button(
+            "Wygrane gospodarzy (czyste wyniki)",
+            on_click=set_prompt,
+            args=("mecze gospodarzy wygrane",),
+            use_container_width=True
+        )
     with col_q3:
-        if st.button(" Wyjazdy z min. 1 strzelonym golem", on_click=set_prompt, args=("mecze na wyjeździe z min jednym strzelonym golem",), use_container_width=True):
-            pass
-        if st.button(" Wygrane mecze mając więcej wygranych pojedynków", on_click=set_prompt, args=("mecze wygrane mając więcej wygranych pojedynków",), use_container_width=True):
-            pass
+        st.button(
+            "Kto dopuszcza najmniej xGA na mecz?",
+            on_click=set_prompt,
+            args=("kto dopuszcza najmniej xGA średnio na mecz",),
+            use_container_width=True
+        )
+        st.button(
+            "Wygrane na wyjeździe z czystym kontem",
+            on_click=set_prompt,
+            args=("mecze wygrane na wyjeździe z czystym kontem",),
+            use_container_width=True
+        )
 
-    # 2. Formularz wyszukiwarki: brak parametru `value=` eliminuje cofanie wpisanego tekstu!
     with st.form(key="ai_scout_form", clear_on_submit=False):
         c_input, c_btn = st.columns([4.2, 0.8])
         with c_input:
             st.text_input(
-                " Wpisz swoje zapytanie:",
+                "Wpisz swoje zapytanie:",
                 key="ai_scout_user_query",
-                placeholder="np. mecze Chelsea wygrane pomimo niższego xG, mecze Evertonu z większą liczbą podań...",
+                placeholder="np. mecze zremisowane przez Wisłę Kraków, wygrane Chelsea przy niższym xG i >10 strzałach...",
                 label_visibility="collapsed"
             )
         with c_btn:
-            st.form_submit_button(" Szukaj" if selected_lang == "PL" else " Search", use_container_width=True)
+            st.form_submit_button("Szukaj" if selected_lang == "PL" else "Search", use_container_width=True)
 
-    # Pobieramy bieżącą treść zapytania bezpośrednio ze stanu sesji
     user_query = st.session_state.get("ai_scout_user_query", "").strip()
 
-    # 3. Rozwijany kreator filtrów (opcjonalny)
-    with st.expander(" Kliknij tutaj, jeśli wolisz precyzyjnie wyklikać filtry zamiast pisać"):
-        col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-        with col_f1:
-            team_choices = ["Wszystkie (Liga)"] + sorted(team_stats["Team"].unique().tolist())
-            cr_team = st.selectbox("Drużyna:", team_choices, index=0, key="cr_sb_team")
-            cr_venue = st.selectbox("Miejsce meczu:", ["Wszystkie", "Tylko u siebie (Home)", "Tylko na wyjeździe (Away)"], index=0, key="cr_sb_venue")
-        with col_f2:
-            cr_result = st.selectbox("Wynik meczu:", ["Dowolny", "Tylko Wygrane (3 pkt)", "Tylko Remisy (1 pkt)", "Tylko Porażki (0 pkt)"], index=0, key="cr_sb_res")
-            cr_goals_cond = st.selectbox("Warunek bramkowy:", ["Dowolny", "Min. 1 strzelony gol", "Min. 1 stracony gol", "Czyste konto (0 straconych)", "Obie strzeliły (BTTS)"], index=0, key="cr_sb_goals")
-        with col_f3:
-            cr_paradox = st.selectbox(
-                "Wygrana pomimo gorszych statystyk:",
-                [
-                    "Brak (Dowolne)",
-                    "Niższe xGOT niż rywal",
-                    "Niższe xG ogólne niż rywal",
-                    "Niższe npxG (bez karnych)",
-                    "Niższe xG z gry otwartej (Open Play)",
-                    "Niższe xG ze SFG niż rywal",
-                    "Mniejsza liczba oddanych strzałów",
-                    "Mniejsza liczba strzałów z szesnastki",
-                    "Niższe posiadanie piłki (< 50%)",
-                    "Mniej wygranych pojedynków"
-                ],
-                index=0, key="cr_sb_paradox"
-            )
-            cr_anomaly = st.selectbox(
-                "Anomalie vs norma zespołu (>25% odchyłki):",
-                ["Brak", "Anomalia Podań", "Anomalia Strzałów", "Anomalia Fauli", "Anomalia xG"],
-                index=0, key="cr_sb_anom"
-            )
-        with col_f4:
-            cr_is_streak = st.checkbox("Badaj serie meczowe", value=False, key="cr_cb_streak")
-            cr_streak_len = st.slider("Minimalna długość serii:", min_value=1, max_value=8, value=3, step=1, key="cr_sl_streak")
-
-    # =========================================================
-    # SILNIK PARSUJĄCY I WYKONUJĄCY ZAPYTANIA
-    # =========================================================
-    def normalize_nlp(txt):
-        txt = str(txt).lower()
-        rep = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
-        for k, v in rep.items():
-            txt = txt.replace(k, v)
-        # Korekta typowych literówek
-        txt = txt.replace("pomiimo", "pomimo").replace("wygrene", "wygrane")
-        txt = txt.replace("set-play", "set play").replace("open-play", "open play")
-        txt = txt.replace("xg-set play", "set play").replace("xg set-play", "set play")
-        return txt
-
-    q_norm = normalize_nlp(user_query) if user_query else ""
-
-    # Ustalanie parametrów wyszukiwania
-    # 1. Inteligentne dopasowanie drużyny z polską odmianą i ochroną przed kolizjami miast
-    selected_team_filter = None
-    if cr_team != "Wszystkie (Liga)":
-        selected_team_filter = cr_team
-    else:
-        CLUB_ALIASES = {
-            # Polska (z odmianami)
-            "wisla krakow": ["wisla krakow", "wisly krakow", "wisle krakow", "wisla", "wisly", "wisle", "biala gwiazda"],
-            "wisla plock": ["wisla plock", "wisly plock", "wisle plock", "nafciarze"],
-            "wieczysta krakow": ["wieczysta krakow", "wieczystej krakow", "wieczysta", "wieczystej"],
-            "cracovia": ["cracovia", "cracovii", "cracovie", "pasy"],
-            "legia warszawa": ["legia warszawa", "legii warszawa", "legie warszawa", "legia", "legii", "legie"],
-            "lech poznan": ["lech poznan", "lecha poznan", "lechowi poznan", "lechem poznan", "lech", "lecha", "kolejorz"],
-            "slask wroclaw": ["slask wroclaw", "slaska wroclaw", "slaskowi wroclaw", "slask", "slaska"],
-            "rakow czestochowa": ["rakow czestochowa", "rakowa czestochowa", "rakowowi czestochowa", "rakow", "rakowa"],
-            "jagiellonia bialystok": ["jagiellonia bialystok", "jagiellonii bialystok", "jagiellonie bialystok", "jagiellonia", "jagiellonii", "jagiellonie", "jaga", "jagi"],
-            "pogon szczecin": ["pogon szczecin", "pogoni szczecin", "pogon", "pogoni", "portowcy"],
-            "gornik zabrze": ["gornik zabrze", "gornika zabrze", "gornikowi zabrze", "gornik", "gornika"],
-            "piast gliwice": ["piast gliwice", "piasta gliwice", "piastowi gliwice", "piast", "piasta"],
-            "korona kielce": ["korona kielce", "korony kielce", "korone kielce", "korona", "korony", "korone"],
-            "motor lublin": ["motor lublin", "motoru lublin", "motorowi lublin", "motor", "motoru"],
-            "widzew lodz": ["widzew lodz", "widzewa lodz", "widzewowi lodz", "widzew", "widzewa"],
-            "zaglebie lubin": ["zaglebie lubin", "zaglebia lubin", "zaglebiu lubin", "zaglebie", "zaglebia"],
-            "radomiak radom": ["radomiak radom", "radomiaka radom", "radomiak", "radomiaka"],
-            "stal mielec": ["stal mielec", "stali mielec", "stal", "stali"],
-            "puszcza niepolomice": ["puszcza niepolomice", "puszczy niepolomice", "puszcze niepolomice", "puszcza", "puszczy"],
-            "gks katowice": ["gks katowice", "gks-u katowice", "gieksa", "gieksy"],
-            "lechia gdansk": ["lechia gdansk", "lechii gdansk", "lechie gdansk", "lechia", "lechii", "lechie"],
-            "arka gdynia": ["arka gdynia", "arki gdynia", "arke gdynia", "arka", "arki", "arke"],
-            # Top 5
-            "manchester city": ["man city", "manchester city", "city", "mcfc", "obywatele"],
-            "manchester united": ["man utd", "manchester united", "man united", "united", "mufc", "czerwone diably"],
-            "nottingham forest": ["nottingham", "forest", "nffc"],
-            "wolverhampton wanderers": ["wolves", "wolverhampton"],
-            "newcastle united": ["newcastle"],
-            "west ham united": ["west ham"],
-            "brighton & hove albion": ["brighton"],
-            "tottenham hotspur": ["tottenham", "spurs"],
-            "atletico madrid": ["atletico", "atlético"],
-            "real madrid": ["real madryt", "real madrid"],
-            "inter": ["inter mediolan", "inter milan", "inter"],
-            "milan": ["ac milan", "milan"],
-            "bayern münchen": ["bayern", "bayern monachium", "bayern munich"],
-            "borussia dortmund": ["dortmund", "bvb"],
-            "paris saint-germain": ["psg", "paris"],
-        }
-
-        # KROK 1: Sortujemy aliasy od najdłuższych (np. "wisla plock" i "wisla krakow" przed samym "wisla")
-        alias_pairs = []
-        for canonical_key, aliases in CLUB_ALIASES.items():
-            for a in aliases:
-                alias_pairs.append((canonical_key, normalize_nlp(a)))
-        alias_pairs.sort(key=lambda x: len(x[1]), reverse=True)
-
-        for canonical_key, alias_clean in alias_pairs:
-            if f" {alias_clean} " in f" {q_norm} ":
-                for real_team in team_stats["Team"].unique():
-                    real_clean = normalize_nlp(real_team)
-                    if canonical_key == real_clean or canonical_key in real_clean or real_clean in canonical_key:
-                        selected_team_filter = real_team
-                        break
-            if selected_team_filter:
-                break
-
-        # KROK 2: Pełna nazwa drużyny w zapytaniu
-        sorted_teams = sorted(team_stats["Team"].unique(), key=lambda x: len(normalize_nlp(x)), reverse=True)
-        if not selected_team_filter:
-            for t_cand in sorted_teams:
-                t_clean = normalize_nlp(t_cand)
-                if t_clean in q_norm:
-                    selected_team_filter = t_cand
-                    break
-
-        # KROK 3: Dopasowanie po rdzeniu unikalnego słowa (z wykluczeniem miast i współdzielonych członów)
-        if not selected_team_filter:
-            GENERIC_CLUB_WORDS = {
-                "city", "united", "town", "real", "fc", "gks", "ks", "mks", "lks", "zks", "rks",
-                "de", "la", "cf", "ac", "inter", "manchester", "madrid", "milan",
-                "krakow", "plock", "warszawa", "poznan", "lodz", "wroclaw", "gdansk",
-                "gdynia", "szczecin", "bialystok", "czestochowa", "gliwice", "kielce",
-                "lublin", "lubin", "zabrze", "katowice", "radom", "mielec", "niepolomice",
-                "wisla", "gornik", "pogon", "stal"
-            }
-            for t_cand in sorted_teams:
-                t_clean = normalize_nlp(t_cand)
-                unique_words = [w for w in t_clean.split() if len(w) >= 3 and w not in GENERIC_CLUB_WORDS]
-                for w in unique_words:
-                    stem = w[:-1] if len(w) >= 5 else w
-                    if any(tok.startswith(stem) for tok in q_norm.split()):
-                        selected_team_filter = t_cand
-                        break
-                if selected_team_filter:
-                    break
-
-    selected_venue_filter = None
-    if "u siebie" in cr_venue.lower() or any(w in q_norm for w in ["u siebie", "dom", "domu", "domowe", "gospodarz"]):
-        selected_venue_filter = "Home"
-    elif "wyjeździe" in cr_venue.lower() or any(w in q_norm for w in ["na wyjezdzie", "wyjazd", "wyjazdowe", "delegacj", "gosc"]):
-        selected_venue_filter = "Away"
-
-    detect_streak = cr_is_streak or any(w in q_norm for w in ["seri", "streak", "z rzedu", "pod rzad", "kolejnych"])
-    # Wykrywanie zapytań o średnie, sumy lub liderów statystyk (z wyłączeniem pytań o listę meczów)
-    q_no_per_match = q_norm.replace("na mecz", "").replace("w meczu", "").replace("co mecz", "")
-    asks_matches_list = any(w in q_no_per_match for w in ["mecze", "meczow", "spotkani", "kiedy", "z kim"])
-    is_stat_question = (
-        not detect_streak
-        and not asks_matches_list
-        and any(w in q_norm for w in [
-            "ile ", "jaka ", "jakie ", "jaki ", "sredni", "suma", "lacznie", "razem",
-            "najwiecej", "najmniej", "najwyzsz", "najnizsz", "statystyk", "bilans", "procent", "%"
-        ])
-    )
-    is_longest_query = any(w in q_norm for w in ["najdluzsz", "ile trwala", "ile trwal", "maksymaln", "rekord"])
-
-    num_map = {
-        "jedno": 1, "jeden": 1, "1": 1,
-        "dwu": 2, "dwa": 2, "dwie": 2, "dwuch": 2, "dwoch": 2, "2": 2,
-        "trzy": 3, "trzech": 3, "troj": 3, "3": 3,
-        "cztero": 4, "cztery": 4, "czterech": 4, "4": 4,
-        "piecio": 5, "piec": 5, "pieciu": 5, "5": 5,
-        "szescio": 6, "szesc": 6, "szesciu": 6, "6": 6,
-        "siedmio": 7, "siedem": 7, "7": 7
-    }
-    explicit_num = None
-    for k_num, v_num in num_map.items():
-        if k_num in q_norm:
-            explicit_num = v_num
-            break
-
-    if is_longest_query:
-        streak_target_len = 1
-    elif explicit_num is not None:
-        streak_target_len = explicit_num
-    elif selected_team_filter is not None:
-        streak_target_len = 2
-    else:
-        streak_target_len = cr_streak_len
-
-    has_active_query = bool(user_query or cr_team != "Wszystkie (Liga)" or cr_venue != "Wszystkie" or cr_result != "Dowolny" or cr_paradox != "Brak (Dowolne)" or cr_anomaly != "Brak" or cr_is_streak)
-
-    if has_active_query:
-        st.markdown("---")
-
-        # TRYB A: BADANIE SERII MECZOWYCH (STREAKS)
-        if detect_streak:
-            venue_label = "U Siebie (Dom)" if selected_venue_filter == "Home" else ("Na Wyjeździe" if selected_venue_filter == "Away" else "Ogólne (Dom + Wyjazd)")
-
-            # Rozpoznanie rodzaju badanej serii
-            if any(w in q_norm for w in ["bez porazk", "niepokonan"]):
-                streak_type_label = "Meczów bez porażki"
-                cond_fn = lambda r: r["Points"] >= 1
-            elif any(w in q_norm for w in ["bez wygran", "bez zwyciestw"]):
-                streak_type_label = "Meczów bez wygranej"
-                cond_fn = lambda r: r["Points"] < 3
-            elif any(w in q_norm for w in ["poraz", "przegran"]):
-                streak_type_label = "Porażek z rzędu"
-                cond_fn = lambda r: r["Points"] == 0
-            elif any(w in q_norm for w in ["remis"]):
-                streak_type_label = "Remisów z rzędu"
-                cond_fn = lambda r: r["Points"] == 1
-            elif any(w in q_norm for w in ["czystym kontem", "bez straty"]):
-                streak_type_label = "Meczów z czystym kontem"
-                cond_fn = lambda r: r["Goals_Against"] == 0
-            elif any(w in q_norm for w in ["ze strzelonym golem", "z golem"]):
-                streak_type_label = "Meczów ze strzelonym golem"
-                cond_fn = lambda r: r["Goals_For"] >= 1
-            else:
-                streak_type_label = "Zwycięstw z rzędu"
-                cond_fn = lambda r: r["Points"] == 3
-
-            if is_longest_query:
-                team_title = f" — {selected_team_filter}" if selected_team_filter else " (Skala Ligi)"
-                st.subheader(f"Najdłuższa seria ({streak_type_label}): {venue_label}{team_title}")
-            else:
-                st.subheader(f"Serie ({streak_type_label}): {venue_label} (Długość: min. {streak_target_len} meczów)")
-
-            streak_records = []
-            pool_teams = [selected_team_filter] if selected_team_filter else team_stats["Team"].unique()
-
-            for tm in pool_teams:
-                tm_matches = matches_df[matches_df["Team"] == tm].copy().reset_index(drop=True)
-                if selected_venue_filter:
-                    tm_matches = tm_matches[tm_matches["Venue"] == selected_venue_filter].reset_index(drop=True)
-
-                current_streak = []
-                for idx, r_m in tm_matches.iterrows():
-                    if cond_fn(r_m):
-                        current_streak.append(r_m)
-                    else:
-                        if len(current_streak) >= streak_target_len:
-                            streak_records.append({"Team": tm, "Length": len(current_streak), "Matches": list(current_streak)})
-                        current_streak = []
-                if len(current_streak) >= streak_target_len:
-                    streak_records.append({"Team": tm, "Length": len(current_streak), "Matches": list(current_streak)})
-
-            streak_records.sort(key=lambda x: x["Length"], reverse=True)
-            if is_longest_query and streak_records:
-                max_len = streak_records[0]["Length"]
-                streak_records = [s for s in streak_records if s["Length"] == max_len]
-
-            if streak_records:
-                if is_longest_query:
-                    st.success(f"**Najdłuższa seria trwała {streak_records[0]['Length']} meczów z rzędu** (znaleziono {len(streak_records)} takich serii).")
-                else:
-                    st.success(f"**Znaleziono {len(streak_records)} serii** spełniających kryteria (długość $\ge {streak_target_len}$ meczów z rzędu).")
-
-                for s_idx, st_data in enumerate(streak_records, 1):
-                    team_name = st_data["Team"]
-                    s_len = st_data["Length"]
-                    st.markdown(
-                        f"""<div style="background-color: #161B22; border-left: 4px solid #10B981; border-radius: 6px; padding: 10px 14px; margin-bottom: 6px;">
-                            <span style="font-weight: 800; color: #10B981; font-size: 14px;">#{s_idx} {team_name} – {streak_type_label}: {s_len} meczów ({venue_label})</span>
-                        </div>""",
-                        unsafe_allow_html=True
-                    )
-                    match_chips = []
-                    for m_s in st_data["Matches"]:
-                        v_str = "D" if m_s["Venue"] == "Home" else "W"
-                        res_str = f"{int(m_s['Goals_For'])}:{int(m_s['Goals_Against'])}"
-                        match_chips.append(f"vs {m_s['Opponent']} ({v_str}) [{res_str}]")
-                    st.info(" ➔ ".join(match_chips))
-            else:
-                st.warning(f"Brak serii ({streak_type_label}) o długości co najmniej {streak_target_len} meczów dla wybranego filtra ({venue_label}).")
-
-        # TRYB B: PYTANIA O ŚREDNIE, SUMY I RANKINGI STATYSTYCZNE
-        elif is_stat_question:
-            # 1. Rozpoznanie metryki (z obsługą literówek typu 'strzekla')
-            if any(w in q_norm for w in ["strac", "traci", "wpuszcz", "przeciwko"]) and any(w in q_norm for w in ["gol", "bram"]):
-                m_lbl, m_col, is_pct, lower_better = "Gole stracone", "Goals_Against", False, True
-            elif any(w in q_norm for w in ["gol", "bram", "strzel", "strzekl"]):
-                m_lbl, m_col, is_pct, lower_better = "Gole strzelone", "Goals_For", False, False
-            elif "xga" in q_norm or ("xg" in q_norm and any(w in q_norm for w in ["strac", "dopuszcz"])):
-                m_lbl, m_col, is_pct, lower_better = "Dopuszczone xGA", "xG_Against", False, True
-            elif "xgot" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "xGOT (jakość celnych strzałów)", "xGOT_For", False, False
-            elif "npxg" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "npxG (bez karnych)", "npxG_For", False, False
-            elif "xg" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Wykreowane xG", "xG_For", False, False
-            elif "celn" in q_norm and "strzal" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Strzały celne", "Shots_On_Target", False, False
-            elif any(w in q_norm for w in ["pola karnego", "szesnast"]) and "strzal" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Strzały z pola karnego", "Box_Shots", False, False
-            elif "strzal" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Oddane strzały", "Shots", False, False
-            elif "posiadani" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Posiadanie piłki (%)", "Possession", True, False
-            elif "podan" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Podania ogółem", "Passes_Total", False, False
-            elif "pojedyn" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Wygrane pojedynki", "Duels_Won", False, False
-            elif "wielk" in q_norm or "big chance" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Wielkie szanse (Big Chances)", "Big_Chances", False, False
-            elif "rozn" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Rzuty rożne", "Corners", False, False
-            elif "punkt" in q_norm or "pkt" in q_norm:
-                m_lbl, m_col, is_pct, lower_better = "Zdobyte punkty", "Points", False, False
-            else:
-                m_lbl, m_col, is_pct, lower_better = "Gole strzelone", "Goals_For", False, False
-
-            sub_stat = matches_df.copy()
-            if selected_venue_filter:
-                sub_stat = sub_stat[sub_stat["Venue"] == selected_venue_filter]
-
-            venue_txt = "Dom" if selected_venue_filter == "Home" else ("Wyjazd" if selected_venue_filter == "Away" else "Dom + Wyjazd")
-
-            # Ranking ligowy dla danej metryki
-            rk_df = sub_stat.groupby("Team").agg(
-                Mecze=(m_col, "count"),
-                Srednia=(m_col, "mean"),
-                Suma=(m_col, "sum")
-            ).reset_index().sort_values(by="Srednia", ascending=lower_better).reset_index(drop=True)
-            rk_df.insert(0, "Pozycja", rk_df.index + 1)
-
-            if selected_team_filter and selected_team_filter in rk_df["Team"].values:
-                t_row = rk_df[rk_df["Team"] == selected_team_filter].iloc[0]
-                lg_avg = rk_df["Srednia"].mean()
-                delta_lg = t_row["Srednia"] - lg_avg
-
-                st.subheader(f"Statystyka: {selected_team_filter} — {m_lbl}")
-                st.caption(f"Zakres: **{venue_txt}** | Rozegrane mecze: **{int(t_row['Mecze'])}**")
-
-                c_s1, c_s2, c_s3 = st.columns(3)
-                val_fmt = f"{t_row['Srednia']:.1f}%" if is_pct else f"{t_row['Srednia']:.2f}"
-                delta_fmt = f"{delta_lg:+.1f}% vs liga" if is_pct else f"{delta_lg:+.2f} vs liga"
-                c_s1.metric("Średnia na mecz", val_fmt, delta_fmt, delta_color="inverse" if lower_better else "normal")
-
-                if not is_pct:
-                    c_s2.metric("Suma łącznie", f"{int(round(t_row['Suma']))}" if m_col in ["Goals_For", "Goals_Against", "Shots", "Shots_On_Target", "Box_Shots", "Passes_Total", "Duels_Won", "Big_Chances", "Corners", "Points"] else f"{t_row['Suma']:.2f}")
-                else:
-                    c_s2.metric("Średnia ligowa", f"{lg_avg:.1f}%")
-
-                c_s3.metric("Miejsce w lidze", f"{int(t_row['Pozycja'])} / {len(rk_df)}")
-
-                # Tabela porównawcza z ligą
-                rk_show = rk_df.copy()
-                rk_show["Srednia"] = rk_show["Srednia"].round(2)
-                rk_show["Suma"] = rk_show["Suma"].round(2)
-                rk_show.columns = ["#", "Drużyna", "Mecze", f"{m_lbl} (Śr./mecz)", f"{m_lbl} (Suma)"]
-                if is_pct:
-                    rk_show = rk_show.drop(columns=[f"{m_lbl} (Suma)"])
-                st.dataframe(rk_show, use_container_width=True, hide_index=True)
-
-            else:
-                # Zapytanie ogólne o ligę (np. "kto strzela najwięcej goli na mecz")
-                lg_avg = rk_df["Srednia"].mean()
-                st.subheader(f"Ranking Ligowy: {m_lbl}")
-                st.caption(f"Zakres: **{venue_txt}** | Średnia ligowa: **{lg_avg:.2f}**")
-
-                rk_show = rk_df.copy()
-                rk_show["Srednia"] = rk_show["Srednia"].round(2)
-                rk_show["Suma"] = rk_show["Suma"].round(2)
-                rk_show.columns = ["#", "Drużyna", "Mecze", f"{m_lbl} (Śr./mecz)", f"{m_lbl} (Suma)"]
-                if is_pct:
-                    rk_show = rk_show.drop(columns=[f"{m_lbl} (Suma)"])
-                st.dataframe(rk_show, use_container_width=True, hide_index=True)
-        
-        # TRYB B: FILTROWANIE MECZÓW
+    if user_query:
+        if not user_api_key:
+            st.warning("Brak klucza Gemini API. Rozwiń sekcję konfiguracji powyżej i wklej klucz, aby uruchomić wyszukiwarkę AI.")
         else:
-            base_matches = matches_df.copy()
-            if selected_team_filter:
-                base_matches = base_matches[base_matches["Team"] == selected_team_filter]
-            if selected_venue_filter:
-                base_matches = base_matches[base_matches["Venue"] == selected_venue_filter]
+            valid_teams_list = sorted(team_stats["Team"].unique().tolist())
+            try:
+                with st.spinner("Analizuję zapytanie..."):
+                    plan = parse_query_with_gemini(user_query, tuple(valid_teams_list), user_api_key)
 
-            # 1. Wynik (odporny na odmiany i literówki typu 'wygrene')
-            is_win = any(w in q_norm for w in ["wygr", "zwyc", "win", "won", "3 pkt"]) or cr_result == "Tylko Wygrane (3 pkt)"
-            is_loss = any(w in q_norm for w in ["przegr", "poraz", "loss", "lost", "0 pkt"]) or cr_result == "Tylko Porażki (0 pkt)"
-            is_draw = any(w in q_norm for w in ["remis", "draw", "1 pkt"]) or cr_result == "Tylko Remisy (1 pkt)"
+                # Rozwiązanie nazw drużyn przez Fuzzy Matching
+                team_sel = resolve_team_fuzzy(plan.get("team"), valid_teams_list)
+                opp_sel = resolve_team_fuzzy(plan.get("opponent"), valid_teams_list)
+                venue_sel = plan.get("venue") if plan.get("venue") in ["Home", "Away"] else None
+                result_sel = plan.get("result") if plan.get("result") in ["win", "draw", "loss"] else None
+                intent = plan.get("intent", "filter_matches")
 
-            if is_win:
-                base_matches = base_matches[base_matches["Points"] == 3]
-            elif is_loss:
-                base_matches = base_matches[base_matches["Points"] == 0]
-            elif is_draw:
-                base_matches = base_matches[base_matches["Points"] == 1]
+                # --- PASEK ZINTERPRETOWANYCH FILTRÓW (TAGI) ---
+                intent_map_pl = {
+                    "filter_matches": "Lista meczów",
+                    "aggregate_stats": "Statystyka / Ranking",
+                    "streaks": "Analiza serii"
+                }
+                res_map_pl = {"win": "Wygrana", "draw": "Remis", "loss": "Porażka"}
+                venue_map_pl = {"Home": "Dom", "Away": "Wyjazd"}
 
-            # 2. Bramki
-            if "min jednym strzelonym" in q_norm or "ze strzelonym golem" in q_norm or cr_goals_cond == "Min. 1 strzelony gol":
-                base_matches = base_matches[base_matches["Goals_For"] >= 1]
-            if "min jednym straconym" in q_norm or "ze straconym golem" in q_norm or cr_goals_cond == "Min. 1 stracony gol":
-                base_matches = base_matches[base_matches["Goals_Against"] >= 1]
-            if "czystym kontem" in q_norm or "bez straty gola" in q_norm or cr_goals_cond == "Czyste konto (0 straconych)":
-                base_matches = base_matches[base_matches["Goals_Against"] == 0]
-            if "btts" in q_norm or "obie strzelily" in q_norm or cr_goals_cond == "Obie strzeliły (BTTS)":
-                base_matches = base_matches[(base_matches["Goals_For"] >= 1) & (base_matches["Goals_Against"] >= 1)]
+                chips = [f"Tryb: {intent_map_pl.get(intent, intent)}"]
+                if team_sel:
+                    chips.append(f"Drużyna: {team_sel}")
+                if opp_sel:
+                    chips.append(f"Rywal: {opp_sel}")
+                if venue_sel:
+                    chips.append(f"Miejsce: {venue_map_pl[venue_sel]}")
+                if result_sel:
+                    chips.append(f"Wynik: {res_map_pl[result_sel]}")
+                for c in plan.get("conditions", []):
+                    if c.get("label"):
+                        chips.append(f"Warunek: {c['label']}")
 
-            # 3. Kierunek porównania
-            # 3. Wykrywanie, czy zapytanie w ogóle wymaga porównania statystyk
-            has_paradox_words = any(w in q_norm for w in [
-                "pomimo", "mimo", "majac", "wyzsz", "wieksz", "wiecej", "lepsz",
-                "nizsz", "mniejsz", "mniej", "gorsz"
-            ])
-            has_explicit_metric = (
-                cr_paradox != "Brak (Dowolne)"
-                or any(w in q_norm for w in [
-                    "pojedyn", "starci", "duels", "xgot", "post-shot", "post shot", "on target",
-                    "set play", "setplay", "sfg", "stalych fragment", "stale fragmenty", "ze stalych",
-                    "open play", "openplay", "gry otwartej", "gra otwarta", "pozycyjn",
-                    "npxg", "non-penalty", "non penalty", "bez karnych",
-                    "pola karnego", "szesnast", "strzal", "posiadani", "podan", "xg"
+                chips_html = " ".join([
+                    f'<span style="background-color: #1E293B; border: 1px solid #38BDF8; color: #E2E8F0; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-right: 6px; display: inline-block; margin-bottom: 4px;">{ch}</span>'
+                    for ch in chips
                 ])
-            )
-            apply_metric_filter = has_paradox_words or has_explicit_metric
+                st.markdown(f"<div style='margin-top: 8px; margin-bottom: 6px;'>{chips_html}</div>", unsafe_allow_html=True)
+                if plan.get("explanation"):
+                    st.caption(f"Interpretacja AI: *{plan['explanation']}*")
+                st.markdown("---")
 
-            # Kierunek porównania (używany tylko gdy apply_metric_filter == True)
-            is_higher = any(w in q_norm for w in ["wyzsz", "wieksz", "wiecej", "lepsz"])
-            is_lower = any(w in q_norm for w in ["nizsz", "mniejsz", "mniej", "gorsz"])
+                # =============================================================
+                # WYKONANIE INTENCJI 1: SERIE MECZOWE (STREAKS)
+                # =============================================================
+                if intent == "streaks":
+                    st_cfg = plan.get("streak") or {}
+                    st_type = st_cfg.get("type", "wins")
+                    is_longest = bool(st_cfg.get("longest_only", False))
+                    min_len = 1 if is_longest else max(1, int(st_cfg.get("min_length", 2)))
 
-            if not is_higher and not is_lower:
-                op_greater = True if is_loss else False
-            else:
-                op_greater = is_higher
-
-            comp_word = "WIĘCEJ / WYŻSZE" if op_greater else "MNIEJ / NIŻSZE"
-
-            # 4. Wykrywanie szukanej statystyki
-            metric_label = "xG (Własne : Rywal)"
-            col_for = "xG_For"
-            col_opp = "xG_Against"
-            val_format = "float"
-
-            if apply_metric_filter:
-                # POJEDYNKI
-                if any(w in q_norm for w in ["pojedyn", "starci", "duels"]) or cr_paradox == "Mniej wygranych pojedynków":
-                    metric_label = "Pojedynki Wygrane (Własne : Rywal)"
-                    col_for = "Duels_Won"
-                    col_opp = "Duels_Won_Against"
-                    val_format = "int"
-
-                # xGOT
-                elif any(w in q_norm for w in ["xgot", "post-shot", "post shot", "on target"]) or cr_paradox == "Niższe xGOT niż rywal":
-                    metric_label = "xGOT (Własne : Rywal)"
-                    col_for = "xGOT_For"
-                    col_opp = "xGOT_Against"
-                    val_format = "float"
-
-                # xG Set Play (stałe fragmenty)
-                elif any(w in q_norm for w in ["set play", "setplay", "sfg", "stalych fragment", "stale fragmenty", "ze stalych"]) or cr_paradox == "Niższe xG ze SFG niż rywal":
-                    metric_label = "xG Set Play (Własne : Rywal)"
-                    col_for = "xG_SP_For"
-                    col_opp = "xG_SP_Against"
-                    val_format = "float"
-
-                # xG Open Play (gra otwarta)
-                elif any(w in q_norm for w in ["open play", "openplay", "gry otwartej", "gra otwarta", "pozycyjn"]) or cr_paradox == "Niższe xG z gry otwartej (Open Play)":
-                    metric_label = "xG Open Play (Własne : Rywal)"
-                    col_for = "xG_OP_For"
-                    col_opp = "xG_OP_Against"
-                    val_format = "float"
-
-                # npxG
-                elif any(w in q_norm for w in ["npxg", "non-penalty", "non penalty", "bez karnych"]) or cr_paradox == "Niższe npxG (bez karnych)":
-                    metric_label = "npxG (Własne : Rywal)"
-                    col_for = "npxG_For"
-                    col_opp = "npxG_Against"
-                    val_format = "float"
-
-                # Strzały z pola karnego
-                elif any(w in q_norm for w in ["pola karnego", "szesnast"]) or cr_paradox == "Mniejsza liczba strzałów z szesnastki":
-                    metric_label = "Strzały z pola (Własne : Rywal)"
-                    col_for = "Box_Shots"
-                    col_opp = "Box_Shots_Against"
-                    val_format = "int"
-
-                # Strzały ogółem
-                elif "strzal" in q_norm or cr_paradox == "Mniejsza liczba oddanych strzałów":
-                    metric_label = "Strzały ogółem (Własne : Rywal)"
-                    col_for = "Shots"
-                    col_opp = "Shots_Against"
-                    val_format = "int"
-
-                # Posiadanie piłki
-                elif "posiadani" in q_norm or cr_paradox == "Niższe posiadanie piłki (< 50%)":
-                    metric_label = "Posiadanie Piłki"
-                    col_for = "Possession"
-                    col_opp = None
-                    val_format = "pct"
-
-                # Podania
-                elif "podan" in q_norm:
-                    metric_label = "Podania (Własne : Rywal)"
-                    col_for = "Passes_Total"
-                    col_opp = "Passes_Total_Against"
-                    val_format = "int"
-
-                # 5. Filtrowanie meczów wg wykrytego kryterium
-                if col_opp:
-                    if op_greater:
-                        base_matches = base_matches[base_matches[col_for] > base_matches[col_opp]]
-                    else:
-                        base_matches = base_matches[base_matches[col_for] < base_matches[col_opp]]
-                elif col_for == "Possession":
-                    if op_greater:
-                        base_matches = base_matches[base_matches["Possession"] > 50.0]
-                    else:
-                        base_matches = base_matches[base_matches["Possession"] < 50.0]
-
-            # 6. Prezentacja wyników – dokładnie 5 kolumn
-            header_team = selected_team_filter if selected_team_filter else "Wszystkie Drużyny (Skala Ligi)"
-            venue_txt = "Dom" if selected_venue_filter == "Home" else ("Wyjazd" if selected_venue_filter == "Away" else "Dom + Wyjazd")
-            res_txt = "Wygrane" if is_win else ("Porażki" if is_loss else ("Remisy" if is_draw else "Wszystkie wyniki"))
-
-            st.subheader(f" Wyniki Wyszukiwania: {header_team}")
-            if apply_metric_filter:
-                st.caption(f"Kryterium: **{res_txt}** | Statystyka: **{metric_label} ({comp_word})** | Miejsce: **{venue_txt}**")
-            else:
-                st.caption(f"Kryterium: **{res_txt}** (bez filtra statystycznego) | Miejsce: **{venue_txt}**")
-
-            if len(base_matches) > 0:
-                st.success(f" **Znaleziono {len(base_matches)} spotkań** spełniających zadane kryteria!")
-
-                table_rows = []
-                for _, r in base_matches.iterrows():
-                    res_str = f"{int(r['Goals_For'])}:{int(r['Goals_Against'])}"
-                    gdzie_str = "Dom" if r["Venue"] == "Home" else "Wyjazd"
-
-                    row_dict = {
-                        "Drużyna": r["Team"],
-                        "Gdzie": gdzie_str,
-                        "Rywal": r["Opponent"],
-                        "Wynik": res_str
+                    streak_defs = {
+                        "wins": ("Zwycięstw z rzędu", lambda r: r["Points"] == 3),
+                        "losses": ("Porażek z rzędu", lambda r: r["Points"] == 0),
+                        "draws": ("Remisów z rzędu", lambda r: r["Points"] == 1),
+                        "unbeaten": ("Meczów bez porażki", lambda r: r["Points"] >= 1),
+                        "winless": ("Meczów bez wygranej", lambda r: r["Points"] < 3),
+                        "clean_sheets": ("Meczów z czystym kontem", lambda r: r["Goals_Against"] == 0),
+                        "goals_scored": ("Meczów ze strzelonym golem", lambda r: r["Goals_For"] >= 1),
                     }
+                    st_label, cond_fn = streak_defs.get(st_type, streak_defs["wins"])
+                    venue_lbl = "U siebie (Dom)" if venue_sel == "Home" else ("Na wyjeździe" if venue_sel == "Away" else "Dom + Wyjazd")
 
-                    if apply_metric_filter:
-                        if val_format == "float":
-                            stat_val_str = f"{r[col_for]:.2f} : {r[col_opp]:.2f}"
-                        elif val_format == "int":
-                            stat_val_str = f"{int(r[col_for])} : {int(r[col_opp])}"
-                        elif val_format == "pct":
-                            opp_poss = 100.0 - r["Possession"]
-                            stat_val_str = f"{r['Possession']:.1f}% : {opp_poss:.1f}%"
-                        row_dict[metric_label] = stat_val_str
+                    streak_records = []
+                    pool_teams = [team_sel] if team_sel else valid_teams_list
 
-                    table_rows.append(row_dict)
+                    for tm in pool_teams:
+                        tm_m = matches_df[matches_df["Team"] == tm].copy().reset_index(drop=True)
+                        if venue_sel:
+                            tm_m = tm_m[tm_m["Venue"] == venue_sel].reset_index(drop=True)
 
-                df_clean_result = pd.DataFrame(table_rows)
-                st.dataframe(df_clean_result, use_container_width=True, hide_index=True)
+                        curr = []
+                        for _, r_m in tm_m.iterrows():
+                            if cond_fn(r_m):
+                                curr.append(r_m)
+                            else:
+                                if len(curr) >= min_len:
+                                    streak_records.append({"Team": tm, "Length": len(curr), "Matches": list(curr)})
+                                curr = []
+                        if len(curr) >= min_len:
+                            streak_records.append({"Team": tm, "Length": len(curr), "Matches": list(curr)})
 
-                if not selected_team_filter:
-                    st.markdown("#####  Kto najczęściej notuje takie mecze?")
-                    top_counter = base_matches["Team"].value_counts().reset_index()
-                    top_counter.columns = ["Drużyna", "Liczba takich spotkań"]
-                    st.dataframe(top_counter, use_container_width=True, hide_index=True)
-            else:
-                st.warning("Nie znaleziono w bazie spotkań spełniających tę kombinację kryteriów.")
+                    streak_records.sort(key=lambda x: x["Length"], reverse=True)
+                    if is_longest and streak_records:
+                        top_len = streak_records[0]["Length"]
+                        streak_records = [s for s in streak_records if s["Length"] == top_len]
+
+                    if streak_records:
+                        st.success(f"Znaleziono **{len(streak_records)}** serii ({st_label} | {venue_lbl}).")
+                        for idx_s, s_item in enumerate(streak_records, 1):
+                            st.markdown(
+                                f"""<div style="background-color: #161B22; border-left: 4px solid #10B981; border-radius: 6px; padding: 10px 14px; margin-bottom: 6px;">
+                                    <span style="font-weight: 800; color: #10B981; font-size: 14px;">#{idx_s} {s_item['Team']} – {st_label}: {s_item['Length']} meczów ({venue_lbl})</span>
+                                </div>""",
+                                unsafe_allow_html=True
+                            )
+                            chips_m = [
+                                f"vs {m['Opponent']} ({'D' if m['Venue'] == 'Home' else 'W'}) [{int(m['Goals_For'])}:{int(m['Goals_Against'])}]"
+                                for m in s_item["Matches"]
+                            ]
+                            st.info(" ➔ ".join(chips_m))
+                    else:
+                        log_unmatched_query(user_query, selected_league_name)
+                        st.warning(f"Brak serii ({st_label}) spełniających kryteria.")
+
+                # =============================================================
+                # WYKONANIE INTENCJI 2: ŚREDNIE, SUMY I RANKINGI (AGGREGATE)
+                # =============================================================
+                elif intent == "aggregate_stats":
+                    agg_cfg = plan.get("agg_metric") or {}
+                    m_col = agg_cfg.get("col", "Goals_For")
+                    if m_col not in matches_df.columns:
+                        m_col = "Goals_For"
+                    m_lbl = agg_cfg.get("label", m_col)
+                    is_pct = bool(agg_cfg.get("is_pct", False))
+                    lower_better = bool(agg_cfg.get("lower_is_better", "Against" in m_col))
+
+                    sub_stat = matches_df.copy()
+                    if venue_sel:
+                        sub_stat = sub_stat[sub_stat["Venue"] == venue_sel]
+
+                    rk_df = sub_stat.groupby("Team").agg(
+                        Mecze=(m_col, "count"),
+                        Srednia=(m_col, "mean"),
+                        Suma=(m_col, "sum")
+                    ).reset_index().sort_values(by="Srednia", ascending=lower_better).reset_index(drop=True)
+                    rk_df.insert(0, "Pozycja", rk_df.index + 1)
+
+                    if team_sel and team_sel in rk_df["Team"].values:
+                        t_row = rk_df[rk_df["Team"] == team_sel].iloc[0]
+                        lg_avg = rk_df["Srednia"].mean()
+                        delta_lg = t_row["Srednia"] - lg_avg
+
+                        st.subheader(f"Statystyka: {team_sel} — {m_lbl}")
+                        c1, c2, c3 = st.columns(3)
+                        c1.metric(
+                            "Średnia na mecz",
+                            f"{t_row['Srednia']:.1f}%" if is_pct else f"{t_row['Srednia']:.2f}",
+                            f"{delta_lg:+.1f}% vs liga" if is_pct else f"{delta_lg:+.2f} vs liga",
+                            delta_color="inverse" if lower_better else "normal"
+                        )
+                        if not is_pct:
+                            c2.metric("Suma łącznie", f"{t_row['Suma']:.2f}")
+                        else:
+                            c2.metric("Średnia ligowa", f"{lg_avg:.1f}%")
+                        c3.metric("Miejsce w lidze", f"{int(t_row['Pozycja'])} / {len(rk_df)}")
+
+                    rk_show = rk_df.copy()
+                    rk_show["Srednia"] = rk_show["Srednia"].round(2)
+                    rk_show["Suma"] = rk_show["Suma"].round(2)
+                    rk_show.columns = ["#", "Drużyna", "Mecze", f"{m_lbl} (Śr./mecz)", f"{m_lbl} (Suma)"]
+                    if is_pct:
+                        rk_show = rk_show.drop(columns=[f"{m_lbl} (Suma)"])
+                    st.dataframe(rk_show, use_container_width=True, hide_index=True)
+
+                # =============================================================
+                # WYKONANIE INTENCJI 3: FILTROWANIE MECZÓW (MULTI-CONDITION)
+                # =============================================================
+                else:
+                    filtered_df = matches_df.copy()
+                    if team_sel:
+                        filtered_df = filtered_df[filtered_df["Team"] == team_sel]
+                    if opp_sel:
+                        filtered_df = filtered_df[filtered_df["Opponent"] == opp_sel]
+                    if venue_sel:
+                        filtered_df = filtered_df[filtered_df["Venue"] == venue_sel]
+                    if result_sel == "win":
+                        filtered_df = filtered_df[filtered_df["Points"] == 3]
+                    elif result_sel == "draw":
+                        filtered_df = filtered_df[filtered_df["Points"] == 1]
+                    elif result_sel == "loss":
+                        filtered_df = filtered_df[filtered_df["Points"] == 0]
+
+                    active_conditions = []
+                    for cond in plan.get("conditions", []):
+                        col = cond.get("col")
+                        op = cond.get("op")
+                        comp_to = cond.get("compare_to", "value")
+                        if col not in filtered_df.columns:
+                            continue
+
+                        if comp_to == "opponent_col":
+                            opp_col = cond.get("opp_col")
+                            if opp_col in filtered_df.columns:
+                                filtered_df = filtered_df[apply_pandas_op(filtered_df[col], op, filtered_df[opp_col])]
+                                active_conditions.append(cond)
+                        else:
+                            val = cond.get("val")
+                            if val is not None:
+                                filtered_df = filtered_df[apply_pandas_op(filtered_df[col], op, float(val))]
+                                active_conditions.append(cond)
+
+                    if len(filtered_df) > 0:
+                        st.success(f"Znaleziono **{len(filtered_df)}** spotkań spełniających wszystkie kryteria!")
+
+                        table_rows = []
+                        for _, r in filtered_df.iterrows():
+                            row_dict = {
+                                "Drużyna": r["Team"],
+                                "Gdzie": "Dom" if r["Venue"] == "Home" else "Wyjazd",
+                                "Rywal": r["Opponent"],
+                                "Wynik": f"{int(r['Goals_For'])}:{int(r['Goals_Against'])}"
+                            }
+                            # Dynamiczne doklejanie kolumn dla każdego aktywnego warunku
+                            for idx_c, c in enumerate(active_conditions, 1):
+                                col_name = c["col"]
+                                c_lbl = c.get("label") or col_name
+                                if c_lbl in row_dict:
+                                    c_lbl = f"{c_lbl} ({idx_c})"
+
+                                if c.get("compare_to") == "opponent_col" and c.get("opp_col") in filtered_df.columns:
+                                    v1, v2 = r[col_name], r[c["opp_col"]]
+                                    if isinstance(v1, float) and not v1.is_integer():
+                                        row_dict[c_lbl] = f"{v1:.2f} : {v2:.2f}"
+                                    else:
+                                        row_dict[c_lbl] = f"{int(round(v1))} : {int(round(v2))}"
+                                else:
+                                    v1 = r[col_name]
+                                    row_dict[c_lbl] = f"{v1:.2f}" if (isinstance(v1, float) and not v1.is_integer()) else f"{int(round(v1))}"
+
+                            table_rows.append(row_dict)
+
+                        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+
+                        if not team_sel:
+                            st.markdown("##### Kto najczęściej notuje takie mecze?")
+                            top_cnt = filtered_df["Team"].value_counts().reset_index()
+                            top_cnt.columns = ["Drużyna", "Liczba spotkań"]
+                            st.dataframe(top_cnt, use_container_width=True, hide_index=True)
+                    else:
+                        log_unmatched_query(user_query, selected_league_name)
+                        st.warning("Nie znaleziono w bazie spotkań spełniających tę kombinację warunków.")
+
+            except Exception as e:
+                st.error(f"Błąd komunikacji z modelem AI lub parsowania odpowiedzi: {e}")
 
 
 # =========================================================================
