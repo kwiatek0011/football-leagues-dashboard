@@ -5543,8 +5543,19 @@ from datetime import datetime
 
 @st.cache_data(show_spinner=False, ttl=3600)
 def parse_query_with_gemini(user_query: str, valid_teams_tuple: tuple, api_key: str) -> dict:
-    """Wysyła zapytanie użytkownika do Gemini 2.5 Flash i wymusza odpowiedź w formacie JSON."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    """Wysyła zapytanie użytkownika do Gemini (obsługuje klucze AQ. oraz AIza) i zwraca JSON."""
+    api_key = api_key.strip()
+
+    if api_key.startswith("AQ."):
+        candidate_urls = [
+            f"https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key={api_key}",
+            f"https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.0-flash:generateContent?key={api_key}",
+        ]
+    else:
+        candidate_urls = [
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}",
+        ]
 
     schema_instructions = f"""
 Jesteś precyzyjnym parserem zapytań piłkarskich. Zamień zapytanie użytkownika na poprawny obiekt JSON (bez znaczników markdown ```json).
@@ -5601,17 +5612,25 @@ ZAPYTANIE UŻYTKOWNIKA: "{user_query}"
 """
 
     payload = {
-        "contents": [{"parts": [{"text": schema_instructions}]}],
+        "contents": [{"role": "user", "parts": [{"text": schema_instructions}]}],
         "generationConfig": {
             "temperature": 0.0,
             "responseMimeType": "application/json"
         }
     }
 
-    resp = requests.post(url, json=payload, timeout=15)
-    resp.raise_for_status()
-    raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-    return json.loads(raw_text)
+    last_error = None
+    for url in candidate_urls:
+        resp = requests.post(url, json=payload, timeout=15)
+        if resp.status_code == 404:
+            last_error = f"404 dla {url.split('?')[0]}: {resp.text}"
+            continue
+        if not resp.ok:
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text}")
+        raw_text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        return json.loads(raw_text)
+
+    raise RuntimeError(last_error or "Nie udało się połączyć z żadnym modelem.")
 
 
 def resolve_team_fuzzy(candidate: str, valid_teams: list):
