@@ -5637,7 +5637,6 @@ with tab_asystent_ai:
     q_norm = normalize_nlp(user_query) if user_query else ""
 
     # Ustalanie parametrów wyszukiwania
-    # Ustalanie parametrów wyszukiwania (albo z tekstu, albo z kreatora)
     # 1. Inteligentne dopasowanie drużyny z polską odmianą i ochroną przed kolizjami miast
     selected_team_filter = None
     if cr_team != "Wszystkie (Liga)":
@@ -5739,20 +5738,31 @@ with tab_asystent_ai:
         selected_venue_filter = "Away"
 
     detect_streak = cr_is_streak or any(w in q_norm for w in ["seri", "streak", "z rzedu", "pod rzad", "kolejnych"])
-    streak_target_len = cr_streak_len
+    is_longest_query = any(w in q_norm for w in ["najdluzsz", "ile trwala", "ile trwal", "maksymaln", "rekord"])
+
     num_map = {
         "jedno": 1, "jeden": 1, "1": 1,
-        "dwu": 2, "dwa": 2, "dwie": 2, "dwuch": 2, "2": 2,
+        "dwu": 2, "dwa": 2, "dwie": 2, "dwuch": 2, "dwoch": 2, "2": 2,
         "trzy": 3, "trzech": 3, "troj": 3, "3": 3,
         "cztero": 4, "cztery": 4, "czterech": 4, "4": 4,
         "piecio": 5, "piec": 5, "pieciu": 5, "5": 5,
         "szescio": 6, "szesc": 6, "szesciu": 6, "6": 6,
         "siedmio": 7, "siedem": 7, "7": 7
     }
+    explicit_num = None
     for k_num, v_num in num_map.items():
         if k_num in q_norm:
-            streak_target_len = v_num
+            explicit_num = v_num
             break
+
+    if is_longest_query:
+        streak_target_len = 1
+    elif explicit_num is not None:
+        streak_target_len = explicit_num
+    elif selected_team_filter is not None:
+        streak_target_len = 2
+    else:
+        streak_target_len = cr_streak_len
 
     has_active_query = bool(user_query or cr_team != "Wszystkie (Liga)" or cr_venue != "Wszystkie" or cr_result != "Dowolny" or cr_paradox != "Brak (Dowolne)" or cr_anomaly != "Brak" or cr_is_streak)
 
@@ -5762,7 +5772,35 @@ with tab_asystent_ai:
         # TRYB A: BADANIE SERII MECZOWYCH (STREAKS)
         if detect_streak:
             venue_label = "U Siebie (Dom)" if selected_venue_filter == "Home" else ("Na Wyjeździe" if selected_venue_filter == "Away" else "Ogólne (Dom + Wyjazd)")
-            st.subheader(f" Serie Zwycięstw: {venue_label} (Długość: min. {streak_target_len} meczów)")
+
+            # Rozpoznanie rodzaju badanej serii
+            if any(w in q_norm for w in ["bez porazk", "niepokonan"]):
+                streak_type_label = "Meczów bez porażki"
+                cond_fn = lambda r: r["Points"] >= 1
+            elif any(w in q_norm for w in ["bez wygran", "bez zwyciestw"]):
+                streak_type_label = "Meczów bez wygranej"
+                cond_fn = lambda r: r["Points"] < 3
+            elif any(w in q_norm for w in ["poraz", "przegran"]):
+                streak_type_label = "Porażek z rzędu"
+                cond_fn = lambda r: r["Points"] == 0
+            elif any(w in q_norm for w in ["remis"]):
+                streak_type_label = "Remisów z rzędu"
+                cond_fn = lambda r: r["Points"] == 1
+            elif any(w in q_norm for w in ["czystym kontem", "bez straty"]):
+                streak_type_label = "Meczów z czystym kontem"
+                cond_fn = lambda r: r["Goals_Against"] == 0
+            elif any(w in q_norm for w in ["ze strzelonym golem", "z golem"]):
+                streak_type_label = "Meczów ze strzelonym golem"
+                cond_fn = lambda r: r["Goals_For"] >= 1
+            else:
+                streak_type_label = "Zwycięstw z rzędu"
+                cond_fn = lambda r: r["Points"] == 3
+
+            if is_longest_query:
+                team_title = f" — {selected_team_filter}" if selected_team_filter else " (Skala Ligi)"
+                st.subheader(f"Najdłuższa seria ({streak_type_label}): {venue_label}{team_title}")
+            else:
+                st.subheader(f"Serie ({streak_type_label}): {venue_label} (Długość: min. {streak_target_len} meczów)")
 
             streak_records = []
             pool_teams = [selected_team_filter] if selected_team_filter else team_stats["Team"].unique()
@@ -5774,7 +5812,7 @@ with tab_asystent_ai:
 
                 current_streak = []
                 for idx, r_m in tm_matches.iterrows():
-                    if r_m["Points"] == 3:
+                    if cond_fn(r_m):
                         current_streak.append(r_m)
                     else:
                         if len(current_streak) >= streak_target_len:
@@ -5783,14 +5821,23 @@ with tab_asystent_ai:
                 if len(current_streak) >= streak_target_len:
                     streak_records.append({"Team": tm, "Length": len(current_streak), "Matches": list(current_streak)})
 
+            streak_records.sort(key=lambda x: x["Length"], reverse=True)
+            if is_longest_query and streak_records:
+                max_len = streak_records[0]["Length"]
+                streak_records = [s for s in streak_records if s["Length"] == max_len]
+
             if streak_records:
-                st.success(f" **Znaleziono {len(streak_records)} serii** spełniających kryteria (długość $\ge {streak_target_len}$ meczów z rzędu).")
+                if is_longest_query:
+                    st.success(f"**Najdłuższa seria trwała {streak_records[0]['Length']} meczów z rzędu** (znaleziono {len(streak_records)} takich serii).")
+                else:
+                    st.success(f"**Znaleziono {len(streak_records)} serii** spełniających kryteria (długość $\ge {streak_target_len}$ meczów z rzędu).")
+
                 for s_idx, st_data in enumerate(streak_records, 1):
                     team_name = st_data["Team"]
                     s_len = st_data["Length"]
                     st.markdown(
                         f"""<div style="background-color: #161B22; border-left: 4px solid #10B981; border-radius: 6px; padding: 10px 14px; margin-bottom: 6px;">
-                            <span style="font-weight: 800; color: #10B981; font-size: 14px;">#{s_idx} {team_name} – Seria {s_len} Zwycięstw z rzędu ({venue_label})</span>
+                            <span style="font-weight: 800; color: #10B981; font-size: 14px;">#{s_idx} {team_name} – {streak_type_label}: {s_len} meczów ({venue_label})</span>
                         </div>""",
                         unsafe_allow_html=True
                     )
@@ -5801,7 +5848,7 @@ with tab_asystent_ai:
                         match_chips.append(f"vs {m_s['Opponent']} ({v_str}) [{res_str}]")
                     st.info(" ➔ ".join(match_chips))
             else:
-                st.warning(f"Brak serii zwycięstw o długości co najmniej {streak_target_len} meczów dla wybranego filtra ({venue_label}).")
+                st.warning(f"Brak serii ({streak_type_label}) o długości co najmniej {streak_target_len} meczów dla wybranego filtra ({venue_label}).")
 
         # TRYB B: FILTROWANIE MECZÓW
         else:
