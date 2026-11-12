@@ -5932,21 +5932,24 @@ with tab_asystent_ai:
                     res_str = f"{int(r['Goals_For'])}:{int(r['Goals_Against'])}"
                     gdzie_str = "Dom" if r["Venue"] == "Home" else "Wyjazd"
 
-                    if val_format == "float":
-                        stat_val_str = f"{r[col_for]:.2f} : {r[col_opp]:.2f}"
-                    elif val_format == "int":
-                        stat_val_str = f"{int(r[col_for])} : {int(r[col_opp])}"
-                    elif val_format == "pct":
-                        opp_poss = 100.0 - r["Possession"]
-                        stat_val_str = f"{r['Possession']:.1f}% : {opp_poss:.1f}%"
-
-                    table_rows.append({
+                    row_dict = {
                         "Drużyna": r["Team"],
                         "Gdzie": gdzie_str,
                         "Rywal": r["Opponent"],
-                        "Wynik": res_str,
-                        metric_label: stat_val_str
-                    })
+                        "Wynik": res_str
+                    }
+
+                    if apply_metric_filter:
+                        if val_format == "float":
+                            stat_val_str = f"{r[col_for]:.2f} : {r[col_opp]:.2f}"
+                        elif val_format == "int":
+                            stat_val_str = f"{int(r[col_for])} : {int(r[col_opp])}"
+                        elif val_format == "pct":
+                            opp_poss = 100.0 - r["Possession"]
+                            stat_val_str = f"{r['Possession']:.1f}% : {opp_poss:.1f}%"
+                        row_dict[metric_label] = stat_val_str
+
+                    table_rows.append(row_dict)
 
                 df_clean_result = pd.DataFrame(table_rows)
                 st.dataframe(df_clean_result, use_container_width=True, hide_index=True)
