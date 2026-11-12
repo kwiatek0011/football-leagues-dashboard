@@ -5583,8 +5583,54 @@ CLUB_ALIASES_LOCAL = {
 }
 
 
+# Wspólna baza wszystkich metryk z matches_df:
+# (słowa_kluczowe_rdzenie, kolumna_wlasna, kolumna_rywala, etykieta_PL, czy_mniej_oznacza_lepiej)
+ALL_METRIC_DEFS = [
+    # 1. Podtypy xG (muszą być przed ogólnym "xg")
+    (["xgot", "post-shot", "post shot", "on target"], "xGOT_For", "xGOT_Against", "xGOT (Własne : Rywal)", False),
+    (["xga", "dopuszczone xg"], "xG_Against", "xG_For", "xGA (Dopuszczone : Rywal)", True),
+    (["set play", "setplay", "sfg", "stalych fragment", "stale fragmenty"], "xG_SP_For", "xG_SP_Against", "xG SFG (Własne : Rywal)", False),
+    (["open play", "openplay", "gry otwartej", "gra otwarta"], "xG_OP_For", "xG_OP_Against", "xG Open Play (Własne : Rywal)", False),
+    (["npxg", "non-penalty", "bez karnych"], "npxG_For", "npxG_Against", "npxG (Własne : Rywal)", False),
+    (["xg"], "xG_For", "xG_Against", "xG (Własne : Rywal)", False),
+
+    # 2. Strzały i sytuacje (muszą być przed ogólnym "strzal")
+    (["celn", "sot"], "Shots_On_Target", "Shots_On_Target_Against", "Strzały celne (Własne : Rywal)", False),
+    (["zza pola", "z dystansu", "outside box"], "Outside_Box_Shots", "Outside_Box_Shots_Against", "Strzały z dystansu (Własne : Rywal)", False),
+    (["pola karnego", "szesnast", "inside box"], "Box_Shots", "Box_Shots_Against", "Strzały w polu (Własne : Rywal)", False),
+    (["wielk", "big chance", "stuprocent"], "Big_Chances", "Big_Chances_Against", "Wielkie szanse (Własne : Rywal)", False),
+    (["kontakt", "touches"], "Box_Touches", "Box_Touches_Against", "Kontakty w polu (Własne : Rywal)", False),
+    (["strzal"], "Shots", "Shots_Against", "Strzały ogółem (Własne : Rywal)", False),
+
+    # 3. Stałe fragmenty, posiadanie i podania
+    (["rozn", "korner", "corner"], "Corners", "Corners_Against", "Rzuty rożne (Własne : Rywal)", False),
+    (["posiadani", "possession"], "Possession", None, "Posiadanie piłki (%)", False),
+    (["dlug", "long ball"], "Long_Balls", "Long_Balls_Against", "Długie piłki (Własne : Rywal)", False),
+    (["polowie rywala", "polowie przeciwnika", "opp half"], "Passes_Opp_Half", "Passes_Opp_Half_Against", "Podania na poł. rywala (Własne : Rywal)", False),
+    (["wlasnej polowie", "own half"], "Passes_Own_Half", "Passes_Own_Half_Against", "Podania na wł. połowie (Własne : Rywal)", False),
+    (["celnych podan", "dokladnych podan"], "Passes_Acc", "Passes_Acc_Against", "Celne podania (Własne : Rywal)", False),
+    (["dosrodkow", "wrzut", "cross"], "Accurate_Crosses", None, "Celne dośrodkowania", False),
+    (["podan"], "Passes_Total", "Passes_Total_Against", "Podania (Własne : Rywal)", False),
+
+    # 4. Pojedynki, obrona, bramkarz, dyscyplina
+    (["glowkow", "powietrzn", "aerial"], "Aerial_Duels_Won", None, "Pojedynki główkowe", False),
+    (["naziemn", "ground"], "Ground_Duels_Won", None, "Pojedynki naziemne", False),
+    (["pojedyn", "starci", "duels"], "Duels_Won", "Duels_Won_Against", "Pojedynki (Własne : Rywal)", False),
+    (["drybling", "dribbles"], "Successful_Dribbles", None, "Udane dryblingi", False),
+    (["obron", "interwencj", "parady", "saves"], "Keeper_Saves", "Keeper_Saves_Against", "Interwencje bramkarza (Własne : Rywal)", False),
+    (["odbior", "tackles"], "Tackles", None, "Odbiory", False),
+    (["przejec", "interceptions"], "Interceptions", None, "Przejęcia", False),
+    (["wybic", "clearances"], "Clearances", None, "Wybicia", False),
+    (["zablokow", "blok", "blocks"], "Blocks", None, "Zablokowane strzały", False),
+    (["spalon", "offside"], "Offsides", None, "Spalone", True),
+    (["faul"], "Fouls", "Fouls_Against", "Faule (Własne : Rywal)", True),
+    (["czerw", "red card"], "Red_Cards", None, "Czerwone kartki", True),
+    (["zolt", "kartk", "yellow"], "Yellow_Cards", None, "Żółte kartki", True),
+]
+
+
 def local_fallback_parser(user_query: str, valid_teams: list) -> dict:
-    """Rozbudowany lokalny parser offline (obsługuje wiele warunków naraz, progi liczbowe, serie i średnie)."""
+    """Rozbudowany lokalny parser offline korzystający z pełnej bazy metryk ALL_METRIC_DEFS."""
     q_norm = normalize_nlp(user_query)
 
     # 1. Wykrywanie drużyny
@@ -5688,22 +5734,19 @@ def local_fallback_parser(user_query: str, valid_teams: list) -> dict:
         m_col, m_lbl, is_pct, lower_b = "Goals_For", "Gole strzelone", False, False
         if any(w in q_norm for w in ["strac", "traci", "wpuszcz"]) and any(w in q_norm for w in ["gol", "bram"]):
             m_col, m_lbl, lower_b = "Goals_Against", "Gole stracone", True
-        elif "xga" in q_norm:
-            m_col, m_lbl, lower_b = "xG_Against", "Dopuszczone xGA", True
-        elif "xgot" in q_norm:
-            m_col, m_lbl = "xGOT_For", "xGOT"
-        elif "xg" in q_norm:
-            m_col, m_lbl = "xG_For", "Wykreowane xG"
-        elif "celn" in q_norm and "strzal" in q_norm:
-            m_col, m_lbl = "Shots_On_Target", "Strzały celne"
-        elif "strzal" in q_norm:
-            m_col, m_lbl = "Shots", "Oddane strzały"
-        elif "posiadani" in q_norm:
-            m_col, m_lbl, is_pct = "Possession", "Posiadanie piłki (%)", True
-        elif "podan" in q_norm:
-            m_col, m_lbl = "Passes_Total", "Podania ogółem"
-        elif "pojedyn" in q_norm:
-            m_col, m_lbl = "Duels_Won", "Wygrane pojedynki"
+        elif any(w in q_norm for w in ["gol", "bram", "strzel", "strzekl"]):
+            m_col, m_lbl, lower_b = "Goals_For", "Gole strzelone", False
+        elif "punkt" in q_norm or "pkt" in q_norm:
+            m_col, m_lbl, lower_b = "Points", "Zdobyte punkty", False
+        else:
+            for kws, c_for, _, lbl, low_b in ALL_METRIC_DEFS:
+                if any(k in q_norm for k in kws):
+                    m_col = c_for
+                    m_lbl = lbl.split(" (")[0]
+                    is_pct = (c_for == "Possession")
+                    lower_b = low_b
+                    break
+
         return {
             "intent": "aggregate_stats", "team": team_sel, "opponent": None, "venue": venue_sel, "result": None,
             "conditions": [],
@@ -5716,19 +5759,7 @@ def local_fallback_parser(user_query: str, valid_teams: list) -> dict:
     if "czystym kontem" in q_norm or "bez straty gola" in q_norm:
         conditions.append({"col": "Goals_Against", "op": "==", "compare_to": "value", "val": 0, "label": "Czyste konto"})
 
-    clauses = re.split(r'\b(?:i|oraz|przy|majac|jednak)\b|,', q_norm)
-    metric_defs = [
-        (["pojedyn", "duels"], "Duels_Won", "Duels_Won_Against", "Pojedynki (Własne : Rywal)"),
-        (["xgot"], "xGOT_For", "xGOT_Against", "xGOT (Własne : Rywal)"),
-        (["set play", "sfg", "stalych fragment"], "xG_SP_For", "xG_SP_Against", "xG SFG (Własne : Rywal)"),
-        (["open play", "gry otwartej"], "xG_OP_For", "xG_OP_Against", "xG Open Play (Własne : Rywal)"),
-        (["npxg", "bez karnych"], "npxG_For", "npxG_Against", "npxG (Własne : Rywal)"),
-        (["pola karnego", "szesnast"], "Box_Shots", "Box_Shots_Against", "Strzały w polu (Własne : Rywal)"),
-        (["strzal"], "Shots", "Shots_Against", "Strzały ogółem (Własne : Rywal)"),
-        (["posiadani"], "Possession", None, "Posiadanie piłki (%)"),
-        (["podan"], "Passes_Total", "Passes_Total_Against", "Podania (Własne : Rywal)"),
-        (["xg"], "xG_For", "xG_Against", "xG (Własne : Rywal)"),
-    ]
+    clauses = re.split(r'\b(?:i|oraz|przy|majac|jednak|ale)\b|,', q_norm)
 
     for cl in clauses:
         num_hi = re.search(r'(?:powyzej|ponad|wiecej niz|min\.?|przynajmniej|>|>=)\s*(\d+(?:[.,]\d+)?)', cl)
@@ -5739,14 +5770,15 @@ def local_fallback_parser(user_query: str, valid_teams: list) -> dict:
         if not (num_hi or num_lo or is_hi or is_lo):
             continue
 
-        for kws, c_for, c_opp, lbl in metric_defs:
+        for kws, c_for, c_opp, lbl, _ in ALL_METRIC_DEFS:
             if any(k in cl for k in kws):
+                base_lbl = lbl.split(" (")[0]
                 if num_hi:
                     v = float(num_hi.group(1).replace(",", "."))
-                    conditions.append({"col": c_for, "op": ">=", "compare_to": "value", "val": v, "label": f"{lbl.split(' (')[0]} >= {v}"})
+                    conditions.append({"col": c_for, "op": ">=", "compare_to": "value", "val": v, "label": f"{base_lbl} >= {v}"})
                 elif num_lo:
                     v = float(num_lo.group(1).replace(",", "."))
-                    conditions.append({"col": c_for, "op": "<=", "compare_to": "value", "val": v, "label": f"{lbl.split(' (')[0]} <= {v}"})
+                    conditions.append({"col": c_for, "op": "<=", "compare_to": "value", "val": v, "label": f"{base_lbl} <= {v}"})
                 else:
                     op = ">" if is_hi else "<"
                     if c_opp:
