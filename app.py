@@ -5638,13 +5638,36 @@ with tab_asystent_ai:
 
     # Ustalanie parametrów wyszukiwania
     # Ustalanie parametrów wyszukiwania (albo z tekstu, albo z kreatora)
-    # 1. Inteligentne dopasowanie drużyny z mapą synonimów i ochroną przed kolizjami
+    # 1. Inteligentne dopasowanie drużyny z polską odmianą i ochroną przed kolizjami miast
     selected_team_filter = None
     if cr_team != "Wszystkie (Liga)":
         selected_team_filter = cr_team
     else:
-        # Słownik popularnych skrótów i aliasów klubowych
         CLUB_ALIASES = {
+            # Polska (z odmianami)
+            "wisla krakow": ["wisla krakow", "wisly krakow", "wisle krakow", "wisla", "wisly", "wisle", "biala gwiazda"],
+            "wisla plock": ["wisla plock", "wisly plock", "wisle plock", "nafciarze"],
+            "wieczysta krakow": ["wieczysta krakow", "wieczystej krakow", "wieczysta", "wieczystej"],
+            "cracovia": ["cracovia", "cracovii", "cracovie", "pasy"],
+            "legia warszawa": ["legia warszawa", "legii warszawa", "legie warszawa", "legia", "legii", "legie"],
+            "lech poznan": ["lech poznan", "lecha poznan", "lechowi poznan", "lechem poznan", "lech", "lecha", "kolejorz"],
+            "slask wroclaw": ["slask wroclaw", "slaska wroclaw", "slaskowi wroclaw", "slask", "slaska"],
+            "rakow czestochowa": ["rakow czestochowa", "rakowa czestochowa", "rakowowi czestochowa", "rakow", "rakowa"],
+            "jagiellonia bialystok": ["jagiellonia bialystok", "jagiellonii bialystok", "jagiellonie bialystok", "jagiellonia", "jagiellonii", "jagiellonie", "jaga", "jagi"],
+            "pogon szczecin": ["pogon szczecin", "pogoni szczecin", "pogon", "pogoni", "portowcy"],
+            "gornik zabrze": ["gornik zabrze", "gornika zabrze", "gornikowi zabrze", "gornik", "gornika"],
+            "piast gliwice": ["piast gliwice", "piasta gliwice", "piastowi gliwice", "piast", "piasta"],
+            "korona kielce": ["korona kielce", "korony kielce", "korone kielce", "korona", "korony", "korone"],
+            "motor lublin": ["motor lublin", "motoru lublin", "motorowi lublin", "motor", "motoru"],
+            "widzew lodz": ["widzew lodz", "widzewa lodz", "widzewowi lodz", "widzew", "widzewa"],
+            "zaglebie lubin": ["zaglebie lubin", "zaglebia lubin", "zaglebiu lubin", "zaglebie", "zaglebia"],
+            "radomiak radom": ["radomiak radom", "radomiaka radom", "radomiak", "radomiaka"],
+            "stal mielec": ["stal mielec", "stali mielec", "stal", "stali"],
+            "puszcza niepolomice": ["puszcza niepolomice", "puszczy niepolomice", "puszcze niepolomice", "puszcza", "puszczy"],
+            "gks katowice": ["gks katowice", "gks-u katowice", "gieksa", "gieksy"],
+            "lechia gdansk": ["lechia gdansk", "lechii gdansk", "lechie gdansk", "lechia", "lechii", "lechie"],
+            "arka gdynia": ["arka gdynia", "arki gdynia", "arke gdynia", "arka", "arki", "arke"],
+            # Top 5
             "manchester city": ["man city", "manchester city", "city", "mcfc", "obywatele"],
             "manchester united": ["man utd", "manchester united", "man united", "united", "mufc", "czerwone diably"],
             "nottingham forest": ["nottingham", "forest", "nffc"],
@@ -5660,45 +5683,53 @@ with tab_asystent_ai:
             "bayern münchen": ["bayern", "bayern monachium", "bayern munich"],
             "borussia dortmund": ["dortmund", "bvb"],
             "paris saint-germain": ["psg", "paris"],
-            
         }
 
-        # KROK 1: Sprawdzenie dedykowanych synonimów
-        for real_team in team_stats["Team"].unique():
-            real_clean = normalize_nlp(real_team)
-            # Sprawdzamy czy którykolwiek alias pasuje do wpisanego zapytania
-            for canonical_key, aliases in CLUB_ALIASES.items():
-                if canonical_key in real_clean or real_clean in canonical_key:
-                    for alias in aliases:
-                        # Szukamy aliasu jako pełnego słowa / frazy
-                        if f" {alias} " in f" {q_norm} ":
-                            selected_team_filter = real_team
-                            break
-                if selected_team_filter:
-                    break
+        # KROK 1: Sortujemy aliasy od najdłuższych (np. "wisla plock" i "wisla krakow" przed samym "wisla")
+        alias_pairs = []
+        for canonical_key, aliases in CLUB_ALIASES.items():
+            for a in aliases:
+                alias_pairs.append((canonical_key, normalize_nlp(a)))
+        alias_pairs.sort(key=lambda x: len(x[1]), reverse=True)
+
+        for canonical_key, alias_clean in alias_pairs:
+            if f" {alias_clean} " in f" {q_norm} ":
+                for real_team in team_stats["Team"].unique():
+                    real_clean = normalize_nlp(real_team)
+                    if canonical_key == real_clean or canonical_key in real_clean or real_clean in canonical_key:
+                        selected_team_filter = real_team
+                        break
             if selected_team_filter:
                 break
 
-        # KROK 2: Jeśli alias nie trafił – szukamy pełnych nazw w zapytaniu (od najdłuższych)
+        # KROK 2: Pełna nazwa drużyny w zapytaniu
+        sorted_teams = sorted(team_stats["Team"].unique(), key=lambda x: len(normalize_nlp(x)), reverse=True)
         if not selected_team_filter:
-            sorted_teams = sorted(team_stats["Team"].unique(), key=lambda x: len(normalize_nlp(x)), reverse=True)
             for t_cand in sorted_teams:
                 t_clean = normalize_nlp(t_cand)
                 if t_clean in q_norm:
                     selected_team_filter = t_cand
                     break
 
-        # KROK 3: Szukanie po unikalnym członie (z dodanym 'manchester' do słów pospolitych!)
+        # KROK 3: Dopasowanie po rdzeniu unikalnego słowa (z wykluczeniem miast i współdzielonych członów)
         if not selected_team_filter:
             GENERIC_CLUB_WORDS = {
-                "city", "united", "town", "real", "fc", "gks", "ks", "de", "la", 
-                "cf", "ac", "inter", "manchester", "madrid", "milan"
+                "city", "united", "town", "real", "fc", "gks", "ks", "mks", "lks", "zks", "rks",
+                "de", "la", "cf", "ac", "inter", "manchester", "madrid", "milan",
+                "krakow", "plock", "warszawa", "poznan", "lodz", "wroclaw", "gdansk",
+                "gdynia", "szczecin", "bialystok", "czestochowa", "gliwice", "kielce",
+                "lublin", "lubin", "zabrze", "katowice", "radom", "mielec", "niepolomice",
+                "wisla", "gornik", "pogon", "stal"
             }
             for t_cand in sorted_teams:
                 t_clean = normalize_nlp(t_cand)
                 unique_words = [w for w in t_clean.split() if len(w) >= 3 and w not in GENERIC_CLUB_WORDS]
-                if any(f" {w} " in f" {q_norm} " for w in unique_words):
-                    selected_team_filter = t_cand
+                for w in unique_words:
+                    stem = w[:-1] if len(w) >= 5 else w
+                    if any(tok.startswith(stem) for tok in q_norm.split()):
+                        selected_team_filter = t_cand
+                        break
+                if selected_team_filter:
                     break
 
     selected_venue_filter = None
