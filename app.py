@@ -11,8 +11,8 @@ TRANSLATIONS = {
     "PL": {
         
         
-        "league_header": "Zaawansowany Dashboard Analityczny",
-        "league_caption": "Dashboard analityczny oparty na danych meczowych FotMob • Sezon 2026/2027",
+        "league_header": "Zaawansowany Panel Analityczny",
+        "league_caption": "Panel analityczny oparty na danych meczowych FotMob • Sezon 2026/2027",
         "choose_league": "Wybierz ligę do analizy:",
         "tab_general": "📋 Statystyki Ogólne",
         "tab_offense": "⚽ Statystyki Ofensywne", 
@@ -1348,37 +1348,37 @@ LEAGUES_CONFIG = {
     "PKO BP Ekstraklasa": {
         "file": "Ekstraklasa 2026-2027.xlsx",
         "matches_per_round": 9,
-        "title": "🇵🇱 Ekstraklasa - Zaawansowany Dashboard Analityczny"
+        "title": "🇵🇱 Ekstraklasa - Zaawansowany Panel Analityczny"
     },
     "Premier League": {
         "file": "Premier League 2026-2027.xlsx",
         "matches_per_round": 10,
-        "title": " Premier League - Zaawansowany Dashboard Analityczny"
+        "title": " Premier League - Zaawansowany Panel Analityczny"
     },
     "La Liga": {
         "file": "La Liga 26-27.xlsx",
-        "title": "La Liga - Zaawansowany Dashboard Analityczny"
+        "title": "La Liga - Zaawansowany Panel Analityczny"
     },
     "Serie A": {
         "file": "Serie A 26-27.xlsx",
         "matches_per_round": 10,
-        "title": "Serie A - Zaawansowany Dashboard Analityczny"
+        "title": "Serie A - Zaawansowany Panel Analityczny"
     },
     "Bundesliga": {
         "file": "Bundesliga 26-27.xlsx",
         "matches_per_round": 9,
-        "title": "Bundesliga - Zaawansowany Dashboard Analityczny"
+        "title": "Bundesliga - Zaawansowany Panel Analityczny"
     },
     "Ligue 1": {
         "file": "Ligue 1 26-27.xlsx",
         "matches_per_round": 9,
-        "title": "Ligue 1 - Zaawansowany Dashboard Analityczny"
+        "title": "Ligue 1 - Zaawansowany Panel Analityczny"
     },
 
     " Top 5 Leagues (Europe)": {
         "file": "TOP5",  # Znacznik informujący o trybie połączonym
         "matches_per_round": 10,
-        "title": " Top 5 Leagues - Zaawansowany Dashboard Analityczny"
+        "title": " Top 5 Leagues - Zaawansowany Panel Analityczny"
     },
 
 
@@ -1451,13 +1451,13 @@ else:
     matches_df, team_stats = load_and_process_team_data(current_league["file"])
 
 # 3. Dynamiczny nagłówek i podtytuł (PL / EN)
-league_pure_title = current_league["title"].replace(" - Zaawansowany Dashboard Analityczny", "").strip()
+league_pure_title = current_league["title"].replace(" - Zaawansowany Panel Analityczny", "").strip()
 if selected_lang == "EN":
     page_main_title = f"{league_pure_title} - Advanced Analytics Dashboard"
     page_main_caption = "Analytical dashboard powered by FotMob match data • Season 2026/2027"
 else:
-    page_main_title = f"{league_pure_title} - Zaawansowany Dashboard Analityczny"
-    page_main_caption = "Dashboard analityczny oparty na danych meczowych FotMob • Sezon 2026/2027"
+    page_main_title = f"{league_pure_title} - Zaawansowany Panel Analityczny"
+    page_main_caption = "Panel analityczny oparty na danych meczowych FotMob • Sezon 2026/2027"
 
 st.title(page_main_title)
 st.caption(page_main_caption)
