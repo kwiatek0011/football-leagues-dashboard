@@ -5006,41 +5006,61 @@ with tab_analiza_ligowa:
         st.error(f" **Strefa Problemowa (Dolne 25%):**\n\n" + ", ".join(tier_zagrozenie))
 
     # =========================================================================
-    # MODUŁ: 3 RÓWNANIA REGRESJI (WYGRANE, PRZEGRANE, REMISY VS WSZYSTKIE STATYSTYKI)
+    # MODUŁ: WIELOZMIENNOWE RÓWNANIA WYNIKÓW (1 DUŻE RÓWNANIE + 3 RÓWNANIA + WYBÓR KLUBU)
     # =========================================================================
     st.markdown("---")
     st.subheader(
-        "📐 Wielozmiennowe Równania Wyników: Wygrane, Przegrane i Remisy"
+        "📐 Wielozmiennowe Równania Wyników: Równanie Zbiorcze + Wygrane, Przegrane i Remisy"
         if selected_lang == "PL" else
-        "📐 Multivariate Outcome Equations: Wins, Losses & Draws"
+        "📐 Multivariate Outcome Equations: Unified Equation + Wins, Losses & Draws"
     )
     st.caption(
-        "Trzy równania regresji liniowej objaśniające prawdopodobieństwo Wygranej, Porażki oraz Remisu na podstawie wszystkich dostępnych statystyk meczowych w lidze."
+        "Zbadaj całą ligę lub wybrany klub: zobacz jedno duże równanie punktowe/bramkowe łączące wszystkie mecze oraz trzy osobne równania dla Wygranych, Porażek i Remisów."
         if selected_lang == "PL" else
-        "Three linear regression equations explaining Win, Loss, and Draw probabilities using all available match statistics in the league."
+        "Analyze the full league or a specific club: view one unified points/goal-diff equation across all matches alongside separate equations for Wins, Losses, and Draws."
     )
 
-    col_eq_ctrl1, col_eq_ctrl2 = st.columns([1.8, 1.4])
+    col_eq_club, col_eq_ctrl1, col_eq_ctrl2 = st.columns([1.4, 1.6, 1.2])
+
+    with col_eq_club:
+        all_league_opt = "🌐 Cała Liga (Wszystkie mecze)" if selected_lang == "PL" else "🌐 Full League (All matches)"
+        club_eq_options = [all_league_opt] + sorted(team_stats["Team"].unique().tolist())
+        selected_eq_club = st.selectbox(
+            "Wybierz zakres / klub do badania:" if selected_lang == "PL" else "Select Scope / Club:",
+            club_eq_options,
+            index=0,
+            key="sb_3eq_club_selector"
+        )
+
     with col_eq_ctrl1:
         reg_mode = st.radio(
             "Metoda estymacji równań:" if selected_lang == "PL" else "Estimation Method:",
             [
-                "Regresja Ridge (Zalecana — stabilizuje współliniowe statystyki)",
-                "Klasyczna Regresja Liniowa (OLS bez tłumienia)"
+                "Regresja Ridge (Zalecana — stabilizuje współliniowość)",
+                "Klasyczna Regresja Liniowa (OLS)"
             ] if selected_lang == "PL" else [
-                "Ridge Regression (Recommended — stabilizes collinear metrics)",
-                "Ordinary Least Squares (Pure OLS)"
+                "Ridge Regression (Recommended — stabilizes collinearity)",
+                "Ordinary Least Squares (OLS)"
             ],
             index=0,
             horizontal=True,
             key="radio_3eq_reg_mode"
         )
+
     with col_eq_ctrl2:
         top_n_chart = st.slider(
-            "Liczba najsilniejszych zmiennych na wykresach:" if selected_lang == "PL" else "Top drivers shown on charts:",
+            "Zmienne na wykresach:" if selected_lang == "PL" else "Drivers on charts:",
             min_value=6, max_value=25, value=12, step=1,
             key="slider_3eq_top_n"
         )
+
+    # Filtrowanie próbki meczowej (Cała Liga vs konkretny wybrany klub)
+    if selected_eq_club == all_league_opt:
+        reg_matches_df = matches_df.copy()
+        scope_badge = selected_league_name
+    else:
+        reg_matches_df = matches_df[matches_df["Team"] == selected_eq_club].copy().reset_index(drop=True)
+        scope_badge = selected_eq_club
 
     # Słownik czytelnych nazw dla wszystkich kolumn meczowych
     METRIC_LABELS_MAP = {
@@ -5115,40 +5135,56 @@ with tab_analiza_ligowa:
         "Duels_Total_Against": ("Wszystkie pojedynki rywala", "Opp Total Duels"),
     }
 
-    # Wybór wszystkich dostępnych zmiennych objaśniających (bez zmiennych wynikowych!)
     LEAKAGE_AND_ID_COLS = {
         "Kolejka", "Team", "Opponent", "Venue",
         "Goals_For", "Goals_Against", "Points", "Wygrana", "Clean_Sheet", "xPoints"
     }
 
     numeric_candidates = [
-        c for c in matches_df.select_dtypes(include=[np.number]).columns
-        if c not in LEAKAGE_AND_ID_COLS and matches_df[c].std() > 1e-9
+        c for c in reg_matches_df.select_dtypes(include=[np.number]).columns
+        if c not in LEAKAGE_AND_ID_COLS and reg_matches_df[c].std() > 1e-9
     ]
 
-    if len(matches_df) >= 20 and len(numeric_candidates) >= 3:
-        X_raw = matches_df[numeric_candidates].fillna(0.0).to_numpy(dtype=float)
+    if len(reg_matches_df) >= 5 and len(numeric_candidates) >= 3:
+        X_raw = reg_matches_df[numeric_candidates].fillna(0.0).to_numpy(dtype=float)
         x_means = X_raw.mean(axis=0)
         x_stds = X_raw.std(axis=0)
         X_std = (X_raw - x_means) / x_stds
 
-        use_ridge = ("Ridge" in reg_mode)
-        alpha_val = max(10.0, len(matches_df) * 0.08) if use_ridge else 1e-6
+        # Przy pojedynczym klubie (gdy meczów jest mniej niż kolumn) automatycznie wymuszamy stabilizację Ridge
+        auto_ridge_forced = (len(reg_matches_df) <= len(numeric_candidates) + 2)
+        use_ridge = ("Ridge" in reg_mode) or auto_ridge_forced
+        alpha_val = max(5.0, len(reg_matches_df) * 0.12) if use_ridge else 1e-6
 
-        def fit_outcome_equation(y_binary: np.ndarray):
-            y_mean = float(y_binary.mean())
+        if selected_eq_club != all_league_opt:
+            st.caption(
+                f"Analizowana próba dla **{selected_eq_club}**: **{len(reg_matches_df)}** meczów | "
+                f"Bilans: **{int((reg_matches_df['Points'] == 3).sum())}Z – {int((reg_matches_df['Points'] == 1).sum())}R – {int((reg_matches_df['Points'] == 0).sum())}P** | "
+                f"Aktywnych zmiennych: **{len(numeric_candidates)}**"
+                + (" *(automatyczna stabilizacja Ridge dla małej próby meczów)*" if auto_ridge_forced and "OLS" in reg_mode else "")
+            )
+
+        def fit_outcome_equation(y_target: np.ndarray):
+            y_mean = float(y_target.mean())
+            if np.std(y_target) < 1e-9:
+                rows = []
+                for col_name in numeric_candidates:
+                    lbl_pair = METRIC_LABELS_MAP.get(col_name, (col_name, col_name))
+                    disp_lbl = lbl_pair[0] if selected_lang == "PL" else lbl_pair[1]
+                    rows.append({"Col": col_name, "Metryka": disp_lbl, "b_raw": 0.0, "beta_std": 0.0, "abs_beta": 0.0})
+                return y_mean, 0.0, pd.DataFrame(rows)
+
             p_dim = X_std.shape[1]
             A_mat = X_std.T @ X_std + alpha_val * np.eye(p_dim)
-            rhs = X_std.T @ (y_binary - y_mean)
+            rhs = X_std.T @ (y_target - y_mean)
             beta_std = np.linalg.solve(A_mat, rhs)
 
-            # Przeliczenie na dokładne współczynniki surowego równania: Y = b0 + sum(b_i * X_i)
             b_raw = beta_std / x_stds
             b0_raw = float(y_mean - np.sum(b_raw * x_means))
 
             y_pred = b0_raw + X_raw @ b_raw
-            ss_res = float(np.sum((y_binary - y_pred) ** 2))
-            ss_tot = float(np.sum((y_binary - y_mean) ** 2))
+            ss_res = float(np.sum((y_target - y_pred) ** 2))
+            ss_tot = float(np.sum((y_target - y_mean) ** 2))
             r2 = max(0.0, 1.0 - (ss_res / ss_tot)) if ss_tot > 0 else 0.0
 
             rows = []
@@ -5165,10 +5201,15 @@ with tab_analiza_ligowa:
             df_eq = pd.DataFrame(rows).sort_values(by="abs_beta", ascending=False).reset_index(drop=True)
             return b0_raw, r2, df_eq
 
-        y_win = (matches_df["Points"] == 3).astype(float).to_numpy()
-        y_loss = (matches_df["Points"] == 0).astype(float).to_numpy()
-        y_draw = (matches_df["Points"] == 1).astype(float).to_numpy()
+        # Zmienne objaśniane: 1 zbiorcza (Punkty 0/1/3 lub Bilans bramkowy) + 3 binarne (Wygrana, Przegrana, Remis)
+        y_pts = reg_matches_df["Points"].astype(float).to_numpy()
+        y_gd = (reg_matches_df["Goals_For"] - reg_matches_df["Goals_Against"]).astype(float).to_numpy()
+        y_win = (reg_matches_df["Points"] == 3).astype(float).to_numpy()
+        y_loss = (reg_matches_df["Points"] == 0).astype(float).to_numpy()
+        y_draw = (reg_matches_df["Points"] == 1).astype(float).to_numpy()
 
+        b0_pts, r2_pts, df_pts = fit_outcome_equation(y_pts)
+        b0_gd, r2_gd, df_gd = fit_outcome_equation(y_gd)
         b0_win, r2_win, df_win = fit_outcome_equation(y_win)
         b0_loss, r2_loss, df_loss = fit_outcome_equation(y_loss)
         b0_draw, r2_draw, df_draw = fit_outcome_equation(y_draw)
@@ -5181,41 +5222,53 @@ with tab_analiza_ligowa:
                 terms.append(f"{sign} {abs(coef):.5f}·[{r_eq['Metryka']}]")
             return f"{y_name} = " + " ".join(terms)
 
+        eq_pts_txt = format_full_equation_str("Punkty(0/1/3)" if selected_lang == "PL" else "Points(0/1/3)", b0_pts, df_pts)
+        eq_gd_txt = format_full_equation_str("Bilans_Bramkowy" if selected_lang == "PL" else "Goal_Diff", b0_gd, df_gd)
         eq_win_txt = format_full_equation_str("P(Wygrana)" if selected_lang == "PL" else "P(Win)", b0_win, df_win)
         eq_loss_txt = format_full_equation_str("P(Przegrana)" if selected_lang == "PL" else "P(Loss)", b0_loss, df_loss)
         eq_draw_txt = format_full_equation_str("P(Remis)" if selected_lang == "PL" else "P(Draw)", b0_draw, df_draw)
 
-        # Podsumowanie KPI dla wszystkich 3 równań
-        k_eq1, k_eq2, k_eq3 = st.columns(3)
+        # Podsumowanie KPI dla równania zbiorczego oraz 3 równań szczegółowych
+        k_eq0, k_eq1, k_eq2, k_eq3 = st.columns(4)
+        k_eq0.metric(
+            "🏆 Duże Równanie: Punkty (R²)" if selected_lang == "PL" else "🏆 Unified Eq: Points (R²)",
+            f"{r2_pts:.1%}",
+            f"Śr. {y_pts.mean():.2f} pkt/mecz | {scope_badge}"
+        )
         k_eq1.metric(
-            "🟢 Równanie 1: Wygrane (R²)" if selected_lang == "PL" else "🟢 Eq 1: Wins (R²)",
+            "🟢 Równanie: Wygrane (R²)" if selected_lang == "PL" else "🟢 Eq: Wins (R²)",
             f"{r2_win:.1%}",
-            f"Baza: {y_win.mean():.1%} meczów | {len(numeric_candidates)} zmiennych"
+            f"{int(y_win.sum())}/{len(y_win)} meczów ({y_win.mean():.0%})"
         )
         k_eq2.metric(
-            "🔴 Równanie 2: Przegrane (R²)" if selected_lang == "PL" else "🔴 Eq 2: Losses (R²)",
+            "🔴 Równanie: Przegrane (R²)" if selected_lang == "PL" else "🔴 Eq: Losses (R²)",
             f"{r2_loss:.1%}",
-            f"Baza: {y_loss.mean():.1%} meczów | {len(numeric_candidates)} zmiennych",
+            f"{int(y_loss.sum())}/{len(y_loss)} meczów ({y_loss.mean():.0%})",
             delta_color="inverse"
         )
         k_eq3.metric(
-            "🔵 Równanie 3: Remisy (R²)" if selected_lang == "PL" else "🔵 Eq 3: Draws (R²)",
+            "🔵 Równanie: Remisy (R²)" if selected_lang == "PL" else "🔵 Eq: Draws (R²)",
             f"{r2_draw:.1%}",
-            f"Baza: {y_draw.mean():.1%} meczów | {len(numeric_candidates)} zmiennych",
+            f"{int(y_draw.sum())}/{len(y_draw)} meczów ({y_draw.mean():.0%})",
             delta_color="off"
         )
 
-        # Zakładki dla każdego z 3 równań + zestawienie zbiorcze
-        subtab_w, subtab_l, subtab_d, subtab_all = st.tabs([
-            "🟢 Równanie 1: Mecze Wygrane" if selected_lang == "PL" else "🟢 Eq 1: Wins",
-            "🔴 Równanie 2: Mecze Przegrane" if selected_lang == "PL" else "🔴 Eq 2: Losses",
-            "🔵 Równanie 3: Mecze Zremisowane" if selected_lang == "PL" else "🔵 Eq 3: Draws",
-            "📊 Porównanie Wszystkich 3 Równań" if selected_lang == "PL" else "📊 Compare All 3 Equations"
+        # Zakładki: 1 Duże Równanie + 3 Równania szczegółowe + Tabela zbiorcza
+        subtab_main_eq, subtab_w, subtab_l, subtab_d, subtab_all = st.tabs([
+            "🏆 Jedno Duże Równanie (Zbiorcze)" if selected_lang == "PL" else "🏆 One Big Equation (Unified)",
+            "🟢 Równanie 1: Wygrane" if selected_lang == "PL" else "🟢 Eq 1: Wins",
+            "🔴 Równanie 2: Przegrane" if selected_lang == "PL" else "🔴 Eq 2: Losses",
+            "🔵 Równanie 3: Remisy" if selected_lang == "PL" else "🔵 Eq 3: Draws",
+            "📊 Porównanie Wszystkich Równań" if selected_lang == "PL" else "📊 Compare All Equations"
         ])
 
         def render_single_equation_view(eq_title: str, eq_formula: str, eq_df: pd.DataFrame, pos_color: str, neg_color: str, chart_key: str):
             st.markdown(f"**{eq_title}**")
             st.code(eq_formula, language="text")
+
+            if eq_df["abs_beta"].sum() == 0:
+                st.info("Brak zróżnicowania wyników w tej kategorii dla wybranego klubu (np. 0 porażek lub 0 remisów w sezonie).")
+                return
 
             top_df = eq_df.head(top_n_chart).iloc[::-1]
             bar_cols = [pos_color if v >= 0 else neg_color for v in top_df["beta_std"]]
@@ -5237,7 +5290,7 @@ with tab_analiza_ligowa:
                 paper_bgcolor="#0E1117",
                 plot_bgcolor="#161B22",
                 title=dict(
-                    text="<b>Najsilniejsze czynniki (Standaryzowany wpływ β na +1 odchylenie σ)</b>" if selected_lang == "PL" else "<b>Top Drivers (Standardized β per +1σ)</b>",
+                    text=f"<b>Najsilniejsze czynniki — {scope_badge} (Wpływ standaryzowany β na +1σ)</b>" if selected_lang == "PL" else f"<b>Top Drivers — {scope_badge} (Standardized β per +1σ)</b>",
                     font=dict(size=13, color="#FFFFFF"), x=0.02
                 ),
                 xaxis=dict(
@@ -5251,14 +5304,13 @@ with tab_analiza_ligowa:
             )
             st.plotly_chart(fig_eq, use_container_width=True, key=chart_key)
 
-            # Pełna tabela współczynników dla wszystkich zmiennych
             tbl_eq = eq_df[["Metryka", "b_raw", "beta_std"]].copy()
             tbl_eq["Kierunek"] = np.where(
                 tbl_eq["beta_std"] > 0.005,
-                "⬆️ Zwiększa prawdopodobieństwo" if selected_lang == "PL" else "⬆️ Increases probability",
+                "⬆️ Podnosi wartość zmiennej Y" if selected_lang == "PL" else "⬆️ Increases target Y",
                 np.where(
                     tbl_eq["beta_std"] < -0.005,
-                    "⬇️ Zmniejsza prawdopodobieństwo" if selected_lang == "PL" else "⬇️ Decreases probability",
+                    "⬇️ Obniża wartość zmiennej Y" if selected_lang == "PL" else "⬇️ Decreases target Y",
                     "➖ Wpływ marginalny" if selected_lang == "PL" else "➖ Marginal effect"
                 )
             )
@@ -5272,50 +5324,82 @@ with tab_analiza_ligowa:
             ]
             st.dataframe(tbl_eq, use_container_width=True, hide_index=True)
 
+        with subtab_main_eq:
+            unified_target_choice = st.radio(
+                "Zmienna objaśniana (Y) w dużym równaniu zbiorczym:" if selected_lang == "PL" else "Target Variable (Y) in Unified Equation:",
+                [
+                    "Zdobyte Punkty w meczu (3 = Wygrana, 1 = Remis, 0 = Porażka)",
+                    "Bilans Bramkowy w meczu (Gole Strzelone − Gole Stracone)"
+                ] if selected_lang == "PL" else [
+                    "Match Points (3 = Win, 1 = Draw, 0 = Loss)",
+                    "Match Goal Difference (Goals For − Goals Against)"
+                ],
+                horizontal=True,
+                key="radio_unified_eq_target"
+            )
+            if "Punkty" in unified_target_choice or "Points" in unified_target_choice:
+                render_single_equation_view(
+                    f"Jedno Duże Równanie Zbiorcze ({scope_badge}) — ZDOBYTE PUNKTY W MECZU (R² = {r2_pts:.1%}):"
+                    if selected_lang == "PL" else f"Unified Equation ({scope_badge}) — MATCH POINTS (R² = {r2_pts:.1%}):",
+                    eq_pts_txt, df_pts, "#38BDF8", "#EF4444", "chart_eq_unified_pts"
+                )
+            else:
+                render_single_equation_view(
+                    f"Jedno Duże Równanie Zbiorcze ({scope_badge}) — BILANS BRAMKOWY W MECZU (R² = {r2_gd:.1%}):"
+                    if selected_lang == "PL" else f"Unified Equation ({scope_badge}) — GOAL DIFFERENCE (R² = {r2_gd:.1%}):",
+                    eq_gd_txt, df_gd, "#10B981", "#EF4444", "chart_eq_unified_gd"
+                )
+
         with subtab_w:
             render_single_equation_view(
-                "Pełne równanie dla MECZÓW WYGRANYCH (wyraz wolny b₀ + wszystkie statystyki):" if selected_lang == "PL" else "Full Equation for WINS:",
+                f"Równanie dla MECZÓW WYGRANYCH ({scope_badge}, R² = {r2_win:.1%}):"
+                if selected_lang == "PL" else f"Equation for WINS ({scope_badge}, R² = {r2_win:.1%}):",
                 eq_win_txt, df_win, "#10B981", "#EF4444", "chart_eq_wins"
             )
 
         with subtab_l:
             render_single_equation_view(
-                "Pełne równanie dla MECZÓW PRZEGRANYCH (wyraz wolny b₀ + wszystkie statystyki):" if selected_lang == "PL" else "Full Equation for LOSSES:",
+                f"Równanie dla MECZÓW PRZEGRANYCH ({scope_badge}, R² = {r2_loss:.1%}):"
+                if selected_lang == "PL" else f"Equation for LOSSES ({scope_badge}, R² = {r2_loss:.1%}):",
                 eq_loss_txt, df_loss, "#EF4444", "#10B981", "chart_eq_losses"
             )
 
         with subtab_d:
             render_single_equation_view(
-                "Pełne równanie dla MECZÓW ZREMISOWANYCH (wyraz wolny b₀ + wszystkie statystyki):" if selected_lang == "PL" else "Full Equation for DRAWS:",
+                f"Równanie dla MECZÓW ZREMISOWANYCH ({scope_badge}, R² = {r2_draw:.1%}):"
+                if selected_lang == "PL" else f"Equation for DRAWS ({scope_badge}, R² = {r2_draw:.1%}):",
                 eq_draw_txt, df_draw, "#38BDF8", "#F59E0B", "chart_eq_draws"
             )
 
         with subtab_all:
             st.markdown(
-                "**Zestawienie wpływu standaryzowanego (β) każdej statystyki we wszystkich trzech równaniach jednocześnie:**"
+                f"**Zestawienie wpływu standaryzowanego (β) dla `{scope_badge}` we wszystkich równaniach:**"
                 if selected_lang == "PL" else
-                "**Side-by-side Standardized Beta (β) across all three outcome equations:**"
+                f"**Side-by-side Standardized Beta (β) for `{scope_badge}` across all equations:**"
             )
-            comp_eq = df_win[["Col", "Metryka", "beta_std", "b_raw"]].rename(columns={
-                "beta_std": "β Wygrana", "b_raw": "b Wygrana"
+            comp_eq = df_pts[["Col", "Metryka", "beta_std", "b_raw"]].rename(columns={
+                "beta_std": "β Punkty (Duże)", "b_raw": "b Punkty"
             }).merge(
+                df_win[["Col", "beta_std", "b_raw"]].rename(columns={"beta_std": "β Wygrana", "b_raw": "b Wygrana"}),
+                on="Col"
+            ).merge(
                 df_loss[["Col", "beta_std", "b_raw"]].rename(columns={"beta_std": "β Przegrana", "b_raw": "b Przegrana"}),
                 on="Col"
             ).merge(
                 df_draw[["Col", "beta_std", "b_raw"]].rename(columns={"beta_std": "β Remis", "b_raw": "b Remis"}),
                 on="Col"
             )
-            comp_eq["Max_Impact"] = comp_eq[["β Wygrana", "β Przegrana", "β Remis"]].abs().max(axis=1)
+            comp_eq["Max_Impact"] = comp_eq[["β Punkty (Duże)", "β Wygrana", "β Przegrana", "β Remis"]].abs().max(axis=1)
             comp_eq = comp_eq.sort_values(by="Max_Impact", ascending=False).drop(columns=["Col", "Max_Impact"]).reset_index(drop=True)
 
-            for c_num in ["β Wygrana", "β Przegrana", "β Remis"]:
+            for c_num in ["β Punkty (Duże)", "β Wygrana", "β Przegrana", "β Remis"]:
                 comp_eq[c_num] = comp_eq[c_num].round(4)
-            for c_raw in ["b Wygrana", "b Przegrana", "b Remis"]:
+            for c_raw in ["b Punkty", "b Wygrana", "b Przegrana", "b Remis"]:
                 comp_eq[c_raw] = comp_eq[c_raw].round(5)
 
             st.dataframe(comp_eq, use_container_width=True, hide_index=True)
     else:
-        st.info("Zbyt mało rozegranych spotkań w tej lidze, aby wyestymować równania wielozmiennowe.")
+        st.info("Zbyt mało rozegranych spotkań dla wybranego zakresu, aby wyestymować równania wielozmiennowe.")
 
 
 
