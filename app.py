@@ -55,6 +55,7 @@ TRANSLATIONS = {
         "att_opt20": "xGOT vs Bramki zdobyte (Over/Underperformance)",
         "att_opt21": "Oddane strzały ogółem (Total Shots)",
         "att_opt22": "Oddane strzały celne (Shots on Target)",
+        "att_opt23": "Kontakty w polu karnym przeciwnika (Touches in Opp Box)",
         "def_select": "🛡️ Wybierz moduł analizy defensywnej:",
     "def_opt1": "Tabela Główna Defensywy",
     "def_opt2": "1. Ogólne xGA na mecz (Dopuszczona jakość szans)",
@@ -76,8 +77,9 @@ TRANSLATIONS = {
     "def_opt18": "Efektywność w szesnastce: Kontakty rywala vs Strzały rywala",
     "def_opt19": "Strzały rywali potrzebne na zdobycie bramki",
     "def_opt20": "xAGOT vs Bramki Stracone (Goals Prevented / Bramkarz)",
+    "def_opt21": "15. Kontakty rywali w naszym polu karnym (Opponent Box Touches)"
 
-    "pass_select": "Wybierz perspektywę analityczną:",
+    "pass_select" "Wybierz perspektywę analityczną:",
     "pass_opt1": "1. Tabela Zbiorcza Dystrybucji (Własne vs Przeciwko)",
     "pass_opt2": "2. Średnie Posiadanie Piłki (% Kontroli meczu)",
     "pass_opt3": "3. Liczba Podań Ogółem (Własne vs Dopuszczone rywalom)",
@@ -143,6 +145,7 @@ TRANSLATIONS = {
         "att_opt20": "xGOT vs Real Goals Scored",
         "att_opt21": "Total Shots per Match",
         "att_opt22": "Shots on Target per Match",
+        "att_opt23": "Touches in Opposition Box per Match",
         "def_select": "🛡️ Select defensive analysis module:",
     "def_opt1": "Main Defensive Table",
     "def_opt2": "1. Total Expected Goals Against (xGA / 90)",
@@ -164,6 +167,7 @@ TRANSLATIONS = {
     "def_opt18": "Box Control: Opponent Touches vs Opponent Shots",
     "def_opt19": "Opponent Shots Needed to Score",
     "def_opt20": "xAGOT vs Goals Conceded (Goalkeeper Goals Prevented)",
+    "def_opt21": "15. Opponent Touches in Our Box / 90",
 
     "pass_select": "Select distribution perspective:",
     "pass_opt1": "1. Full Distribution Table (For vs Against)",
@@ -481,6 +485,8 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
         Kontakty_w_polu_karnym=("Box_Touches", "mean"),
         Box_Touches_Mean=("Box_Touches", "mean"),
         Box_Touches_Against_Mean=("Box_Touches_Against", "mean"),
+        Box_Touches_Sum=("Box_Touches", "sum"),
+        Box_Touches_Against_Sum=("Box_Touches_Against", "sum"),
         Strzaly_z_pola_karnego=("Box_Shots", "mean"),
         Rzuty_Rozne=("Corners", "mean"),
         Odbiory=("Tackles", "mean"),
@@ -631,6 +637,9 @@ def compute_team_stats(matches_subset):
         Kontakty_w_polu_karnym=("Box_Touches", "mean"),
         Box_Touches_Mean=("Box_Touches", "mean"),
         Box_Touches_Against_Mean=("Box_Touches_Against", "mean"),
+        Box_Touches_Sum=("Box_Touches", "sum"),
+        Box_Touches_Against_Sum=("Box_Touches_Against", "sum"),
+        
         Strzaly_z_pola_karnego=("Box_Shots", "mean"),
         Rzuty_Rozne=("Corners", "mean"),
         Odbiory=("Tackles", "mean"),
@@ -1077,6 +1086,9 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
             "Long_Balls_Mean": "Long_Balls_Sum",
             "Accurate_Crosses_Mean": "Accurate_Crosses_Sum",
             "Keeper_Saves_Mean": "Keeper_Saves_Sum",
+            "Box_Touches_Mean": "Box_Touches_Sum",
+            "Box_Touches_Against_Mean": "Box_Touches_Against_Sum",
+            
         }
 
         sum_candidates = [
@@ -1120,7 +1132,7 @@ def render_metric_bar_and_paper(df, col_name, title_chart, title_paper, value_he
     sorted_df = full_sorted_df if show_all else full_sorted_df.head(20)
 
     # 5. Wykres słupkowy
-    is_int_stat = any(k in active_value_header.lower() for k in ["strzał", "shot", "szans", "chance", "podan", "pass", "długie", "long", "odbiór", "tackle", "faule", "foul", "gole", "goals"])
+    is_int_stat = any(k in active_value_header.lower() for k in ["strzał", "shot", "szans", "chance", "podan", "pass", "długie", "long", "odbiór", "tackle", "faule", "foul", "gole", "goals","kontakt", "touch"])
 
     fig = go.Figure()
     fig.add_trace(go.Bar(
@@ -1509,6 +1521,8 @@ common_col_config = {
     "Odbiory": st.column_config.NumberColumn("Tackles / 90" if selected_lang == "EN" else "Odbiory", format="%.2f"),
     "Przejecia": st.column_config.NumberColumn("Interceptions / 90" if selected_lang == "EN" else "Przejęcia", format="%.2f"),
     "Pojedynki Wygrane": st.column_config.NumberColumn("Duels Won / 90" if selected_lang == "EN" else "Pojedynki Wygrane", format="%.2f"),
+    "Kontakty w polu karnym": st.column_config.NumberColumn("Box Touches / 90" if selected_lang == "EN" else "Kontakty w polu karnym", format="%.2f"),
+    "Box Touches Against Mean": st.column_config.NumberColumn("Opp Box Touches / 90" if selected_lang == "EN" else "Kontakty rywala w polu", format="%.2f"),
 }
 
 # =========================================================================
@@ -1824,7 +1838,7 @@ with tab_ofensywa:
 
     ofensywa_widok = st.selectbox(
         t("att_select"),
-        [t(f"att_opt{i}") for i in range(1, 23)],
+        [t(f"att_opt{i}") for i in range(1, 24)],
         key="sb_ofensywa_submodules"
     )
     st.markdown("---")
@@ -2126,6 +2140,32 @@ with tab_ofensywa:
             yaxis_title="Strzały Celne" if selected_lang == "PL" else "SoT"
         )    
 
+    # 23. Kontakty w polu karnym przeciwnika
+    elif ofensywa_widok == t("att_opt23"):
+        st.subheader("Touches in Opposition Box per Match" if selected_lang == "EN" else "Kontakty w polu karnym przeciwnika (Średnia / Mecz)")
+        st.caption(
+            "Ranking of teams generating the most ball touches inside the opponent's penalty area along with match-by-match trajectory."
+            if selected_lang == "EN" else
+            "Zestawienie drużyn notujących najwięcej kontaktów z piłką w szesnastce rywala wraz z dynamiką w poszczególnych kolejkach."
+        )
+        render_metric_bar_and_paper(
+            df=att_team_stats,
+            col_name="Box_Touches_Mean",
+            title_chart="Touches in Opposition Box Rankings",
+            title_paper="Opp Box Touches Rankings",
+            value_header="Box Touches / 90" if selected_lang == "EN" else "Kontakty / 90",
+            color_scale="Blues",
+            sort_asc=False
+        )
+        render_metric_trend_chart(
+            matches_df=att_matches,
+            team_stats=att_team_stats,
+            match_col="Box_Touches",
+            avg_col="Box_Touches_Mean",
+            metric_label="Kontakty w polu karnym rywala" if selected_lang == "PL" else "Touches in Opp Box",
+            yaxis_title="Kontakty" if selected_lang == "PL" else "Touches"
+        )
+
 
 
 
@@ -2179,7 +2219,7 @@ with tab_defensywa:
 
     defensywa_widok = st.selectbox(
         t("def_select"),
-        [t(f"def_opt{i}") for i in range(1, 21)],
+        [t(f"def_opt{i}") for i in range(1, 22)],
         key="sb_def_analytics_view"
     )
     st.markdown("---")
@@ -2189,7 +2229,7 @@ with tab_defensywa:
         st.subheader("🛡️ Defensive Standings & Metrics" if selected_lang == "EN" else "🛡️ Ranking i Metryki Obrony")
         defensywa_cols = [
             "Team", "Mecze", "Gole Stracone", "Gole stracone na mecz", "xGA na mecz", 
-            "xAGOT na mecz", "Odbiory", "Przejecia", "Rzuty Rozne", "Pojedynki Wygrane"
+            "xAGOT na mecz","Box Touches Against Mean", "Odbiory", "Przejecia", "Rzuty Rozne", "Pojedynki Wygrane"
         ]
         st.dataframe(def_display_df[defensywa_cols], use_container_width=True, hide_index=True, column_config=common_col_config)
 
@@ -2456,6 +2496,32 @@ with tab_defensywa:
         fig_ps_d.update_traces(textposition="top center", marker=dict(size=12, color="#38BDF8"))
         st.plotly_chart(fig_ps_d, use_container_width=True)
         render_metric_trend_chart(def_matches, def_team_stats, "Goals_Against", "Gole_stracone_na_mecz", "Gole Stracone", "Bramki")
+
+    # 21. Kontakty rywali w naszym polu karnym
+    elif defensywa_widok == t("def_opt21"):
+        st.subheader("Opponent Touches in Our Box per Match" if selected_lang == "EN" else "Kontakty rywali w naszym polu karnym (Średnia / Mecz)")
+        st.caption(
+            "Lower value = Better box protection; opponents rarely touch the ball inside our penalty area."
+            if selected_lang == "EN" else
+            "Mniejsza wartość = lepsza ochrona własnej szesnastki; rywale rzadko dochodzą do piłki w naszym polu karnym."
+        )
+        render_metric_bar_and_paper(
+            df=def_team_stats,
+            col_name="Box_Touches_Against_Mean",
+            title_chart="Opponent Touches in Box Rankings (Lower = Better)",
+            title_paper="Opp Box Touches Against",
+            value_header="Opp Box Touches / 90" if selected_lang == "EN" else "Kontakty rywala / 90",
+            color_scale="Reds_r",
+            sort_asc=True
+        )
+        render_metric_trend_chart(
+            matches_df=def_matches,
+            team_stats=def_team_stats,
+            match_col="Box_Touches_Against",
+            avg_col="Box_Touches_Against_Mean",
+            metric_label="Kontakty rywali w naszym polu karnym" if selected_lang == "PL" else "Opponent Touches in Our Box",
+            yaxis_title="Kontakty" if selected_lang == "PL" else "Touches"
+        ) 
 
 # =========================================================================
 # TAB 4: DYSTRYBUCJA I PODANIA (Z OBSŁUGĄ FILTRA KOLEJEK)
