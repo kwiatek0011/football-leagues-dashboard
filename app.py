@@ -5010,9 +5010,9 @@ with tab_analiza_ligowa:
     # =========================================================================
     st.markdown("---")
     st.subheader(
-        "📐 Wielozmiennowe Równania Wyników: Równanie Zbiorcze + Wygrane, Przegrane i Remisy"
+        " Wielozmiennowe Równania Wyników: Równanie Zbiorcze + Wygrane, Przegrane i Remisy"
         if selected_lang == "PL" else
-        "📐 Multivariate Outcome Equations: Unified Equation + Wins, Losses & Draws"
+        " Multivariate Outcome Equations: Unified Equation + Wins, Losses & Draws"
     )
     st.caption(
         "Zbadaj całą ligę lub wybrany klub: zobacz jedno duże równanie punktowe/bramkowe łączące wszystkie mecze oraz trzy osobne równania dla Wygranych, Porażek i Remisów."
@@ -5023,7 +5023,7 @@ with tab_analiza_ligowa:
     col_eq_club, col_eq_ctrl1, col_eq_ctrl2 = st.columns([1.4, 1.6, 1.2])
 
     with col_eq_club:
-        all_league_opt = "🌐 Cała Liga (Wszystkie mecze)" if selected_lang == "PL" else "🌐 Full League (All matches)"
+        all_league_opt = " Cała Liga (Wszystkie mecze)" if selected_lang == "PL" else " Full League (All matches)"
         club_eq_options = [all_league_opt] + sorted(team_stats["Team"].unique().tolist())
         selected_eq_club = st.selectbox(
             "Wybierz zakres / klub do badania:" if selected_lang == "PL" else "Select Scope / Club:",
@@ -5231,23 +5231,23 @@ with tab_analiza_ligowa:
         # Podsumowanie KPI dla równania zbiorczego oraz 3 równań szczegółowych
         k_eq0, k_eq1, k_eq2, k_eq3 = st.columns(4)
         k_eq0.metric(
-            "🏆 Duże Równanie: Punkty (R²)" if selected_lang == "PL" else "🏆 Unified Eq: Points (R²)",
+            " Duże Równanie: Punkty (R²)" if selected_lang == "PL" else " Unified Eq: Points (R²)",
             f"{r2_pts:.1%}",
             f"Śr. {y_pts.mean():.2f} pkt/mecz | {scope_badge}"
         )
         k_eq1.metric(
-            "🟢 Równanie: Wygrane (R²)" if selected_lang == "PL" else "🟢 Eq: Wins (R²)",
+            " Równanie: Wygrane (R²)" if selected_lang == "PL" else " Eq: Wins (R²)",
             f"{r2_win:.1%}",
             f"{int(y_win.sum())}/{len(y_win)} meczów ({y_win.mean():.0%})"
         )
         k_eq2.metric(
-            "🔴 Równanie: Przegrane (R²)" if selected_lang == "PL" else "🔴 Eq: Losses (R²)",
+            " Równanie: Przegrane (R²)" if selected_lang == "PL" else " Eq: Losses (R²)",
             f"{r2_loss:.1%}",
             f"{int(y_loss.sum())}/{len(y_loss)} meczów ({y_loss.mean():.0%})",
             delta_color="inverse"
         )
         k_eq3.metric(
-            "🔵 Równanie: Remisy (R²)" if selected_lang == "PL" else "🔵 Eq: Draws (R²)",
+            " Równanie: Remisy (R²)" if selected_lang == "PL" else " Eq: Draws (R²)",
             f"{r2_draw:.1%}",
             f"{int(y_draw.sum())}/{len(y_draw)} meczów ({y_draw.mean():.0%})",
             delta_color="off"
@@ -5255,11 +5255,11 @@ with tab_analiza_ligowa:
 
         # Zakładki: 1 Duże Równanie + 3 Równania szczegółowe + Tabela zbiorcza
         subtab_main_eq, subtab_w, subtab_l, subtab_d, subtab_all = st.tabs([
-            "🏆 Jedno Duże Równanie (Zbiorcze)" if selected_lang == "PL" else "🏆 One Big Equation (Unified)",
-            "🟢 Równanie 1: Wygrane" if selected_lang == "PL" else "🟢 Eq 1: Wins",
-            "🔴 Równanie 2: Przegrane" if selected_lang == "PL" else "🔴 Eq 2: Losses",
-            "🔵 Równanie 3: Remisy" if selected_lang == "PL" else "🔵 Eq 3: Draws",
-            "📊 Porównanie Wszystkich Równań" if selected_lang == "PL" else "📊 Compare All Equations"
+            " Jedno Duże Równanie (Zbiorcze)" if selected_lang == "PL" else " One Big Equation (Unified)",
+            " Równanie 1: Wygrane" if selected_lang == "PL" else " Eq 1: Wins",
+            " Równanie 2: Przegrane" if selected_lang == "PL" else " Eq 2: Losses",
+            " Równanie 3: Remisy" if selected_lang == "PL" else " Eq 3: Draws",
+            " Porównanie Wszystkich Równań" if selected_lang == "PL" else " Compare All Equations"
         ])
 
         def render_single_equation_view(eq_title: str, eq_formula: str, eq_df: pd.DataFrame, pos_color: str, neg_color: str, chart_key: str):
