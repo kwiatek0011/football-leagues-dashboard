@@ -5403,6 +5403,181 @@ with tab_analiza_ligowa:
 
 
 
+# =========================================================================
+    # MODUŁ: LIGOWY SKANER DNA DRUŻYN (KLUCZOWE WARTOŚCI & PROGI ZWYCIĘSTWA)
+    # =========================================================================
+    st.markdown("---")
+    st.subheader(
+        " Ligowy Skaner DNA: Co Naprawdę Napędza Każdy Klub w Lidze?"
+        if selected_lang == "PL" else
+        " League-Wide Team DNA Scanner: Key Win Triggers & Breakpoints"
+    )
+    st.caption(
+        "Algorytm przeczesuje wszystkie dostępne statystyki osobno dla każdej drużyny w lidze, wskazując jej #1 czynnik punktowy, konkretny próg meczowy (breakpoint) oraz pułapki stylu."
+        if selected_lang == "PL" else
+        "Automatically scans all available metrics for every team in the league to extract each club's #1 point trigger, concrete match threshold, and stylistic traps."
+    )
+
+    dna_target_choice = st.radio(
+        "Co ma być celem skanowania dla każdej drużyny?" if selected_lang == "PL" else "Target outcome to scan for each team:",
+        [
+            "Zdobyte Punkty w meczu (0 / 1 / 3 pkt)",
+            "Wyłącznie Zwycięstwa (Wygrana vs Brak wygranej)"
+        ] if selected_lang == "PL" else [
+            "Match Points (0 / 1 / 3 pts)",
+            "Victories Only (Win vs Non-Win)"
+        ],
+        horizontal=True,
+        key="radio_dna_scanner_target"
+    )
+    scan_wins_only = ("Wyłącznie" in dna_target_choice or "Victories" in dna_target_choice)
+
+    all_scan_cols = [
+        c for c in matches_df.select_dtypes(include=[np.number]).columns
+        if c not in LEAKAGE_AND_ID_COLS and matches_df[c].std() > 1e-9
+    ]
+
+    dna_table_rows = []
+    team_corr_map = {}
+
+    for tm_name in sorted(matches_df["Team"].unique()):
+        sub_tm = matches_df[matches_df["Team"] == tm_name].copy()
+        if len(sub_tm) < 4:
+            continue
+
+        y_series = (sub_tm["Points"] == 3).astype(float) if scan_wins_only else sub_tm["Points"].astype(float)
+        if y_series.std() <= 1e-9:
+            continue
+
+        tm_corrs = {}
+        for col_c in all_scan_cols:
+            x_series = sub_tm[col_c].fillna(0.0).astype(float)
+            if x_series.std() > 1e-9:
+                r_c = x_series.corr(y_series)
+                tm_corrs[col_c] = 0.0 if np.isnan(r_c) else float(r_c)
+            else:
+                tm_corrs[col_c] = 0.0
+
+        team_corr_map[tm_name] = tm_corrs
+
+        sorted_pos = sorted(tm_corrs.items(), key=lambda x: x[1], reverse=True)
+        sorted_neg = sorted(tm_corrs.items(), key=lambda x: x[1], reverse=False)
+
+        c1_col, c1_r = sorted_pos[0]
+        c2_col, c2_r = sorted_pos[1] if len(sorted_pos) > 1 else (c1_col, c1_r)
+        trap_col, trap_r = sorted_neg[0]
+
+        def get_clean_lbl(c_key):
+            pair = METRIC_LABELS_MAP.get(c_key, (c_key, c_key))
+            return pair[0] if selected_lang == "PL" else pair[1]
+
+        # Wyznaczenie konkretnego progu meczowego (mediana) dla Klucza #1
+        med_threshold = float(sub_tm[c1_col].median())
+        above_df = sub_tm[sub_tm[c1_col] >= med_threshold]
+        below_df = sub_tm[sub_tm[c1_col] < med_threshold]
+
+        if scan_wins_only:
+            val_above = f"{(above_df['Points'] == 3).mean() * 100:.0f}% wygr." if len(above_df) > 0 else "-"
+            val_below = f"{(below_df['Points'] == 3).mean() * 100:.0f}%" if len(below_df) > 0 else "-"
+        else:
+            val_above = f"{above_df['Points'].mean():.2f} pkt/m" if len(above_df) > 0 else "-"
+            val_below = f"{below_df['Points'].mean():.2f}" if len(below_df) > 0 else "-"
+
+        dna_table_rows.append({
+            "Drużyna": tm_name,
+            "Klucz #1 (Najsilniejszy motor)": f"{get_clean_lbl(c1_col)} (r = {c1_r:+.2f})",
+            "Próg Klucza #1 (Efekt w meczu)": f"≥ {med_threshold:.1f} ➔ {val_above} (poniżej: {val_below})",
+            "Klucz #2 (Wsparcie)": f"{get_clean_lbl(c2_col)} (r = {c2_r:+.2f})",
+            "Pułapka Stylu (Ujemne r)": f"{get_clean_lbl(trap_col)} (r = {trap_r:+.2f})" if trap_r <= -0.20 else ("Brak wyraźnej" if selected_lang == "PL" else "None")
+        })
+
+    if dna_table_rows:
+        tab_dna_1, tab_dna_2, tab_dna_3 = st.tabs([
+            " Tabela DNA Wszystkich Klubów (Klucze & Progi)" if selected_lang == "PL" else " League-Wide Team DNA Table",
+            " Czynniki Uniwersalne vs Unikalne dla Klubów" if selected_lang == "PL" else " Universal vs Team-Specific Drivers",
+            " Mapa Cieplna: Drużyny × Statystyki" if selected_lang == "PL" else " Heatmap: Teams × Metrics"
+        ])
+
+        with tab_dna_1:
+            df_dna_show = pd.DataFrame(dna_table_rows)
+            if selected_lang == "EN":
+                df_dna_show.columns = ["Team", "#1 Key Driver", "#1 Threshold Effect", "#2 Secondary Driver", "Style Trap (Negative r)"]
+            st.dataframe(df_dna_show, use_container_width=True, hide_index=True)
+
+        with tab_dna_2:
+            st.caption(
+                "Pokazuje, które statystyki działają niemal u każdego w lidze (wysoka średnia r), a które dzielą ligę na dwa obozy (wysokie odchylenie między klubami — jednym dają punkty, innym szkodzą)."
+                if selected_lang == "PL" else
+                "Shows which metrics drive points across almost all teams (high mean r) versus polarizing metrics (high std across clubs)."
+            )
+            corr_matrix_df = pd.DataFrame(team_corr_map).T
+            univ_rows = []
+            for col_c in corr_matrix_df.columns:
+                pair = METRIC_LABELS_MAP.get(col_c, (col_c, col_c))
+                lbl = pair[0] if selected_lang == "PL" else pair[1]
+                s_col = corr_matrix_df[col_c]
+                mean_r = float(s_col.mean())
+                std_r = float(s_col.std())
+                max_tm = s_col.idxmax()
+                max_val = float(s_col.max())
+                min_tm = s_col.idxmin()
+                min_val = float(s_col.min())
+
+                if mean_r >= 0.25 and std_r < 0.25:
+                    cat_lbl = " Uniwersalny motor ligi" if selected_lang == "PL" else " Universal League Driver"
+                elif mean_r <= -0.25 and std_r < 0.25:
+                    cat_lbl = " Uniwersalne zagrożenie" if selected_lang == "PL" else " Universal Threat"
+                elif std_r >= 0.28:
+                    cat_lbl = " Czynnik polaryzujący (Zależy od stylu)" if selected_lang == "PL" else " Polarizing (Style-Dependent)"
+                else:
+                    cat_lbl = " Umiarkowany / Neutralny" if selected_lang == "PL" else " Moderate / Neutral"
+
+                univ_rows.append({
+                    "Statystyka": lbl,
+                    "Typ czynnika": cat_lbl,
+                    "Śr. korelacja w lidze (r)": round(mean_r, 2),
+                    "Zróżnicowanie między klubami (σ)": round(std_r, 2),
+                    "Najmocniej napędza": f"{max_tm} ({max_val:+.2f})",
+                    "Najmocniej hamuje / pułapka": f"{min_tm} ({min_val:+.2f})"
+                })
+
+            df_univ = pd.DataFrame(univ_rows).sort_values(by="Śr. korelacja w lidze (r)", ascending=False).reset_index(drop=True)
+            st.dataframe(df_univ, use_container_width=True, hide_index=True)
+
+        with tab_dna_3:
+            corr_matrix_df = pd.DataFrame(team_corr_map).T
+            # Wybieramy 18 najbardziej zróżnicowanych / istotnych metryk, aby mapa cieplna była maksymalnie czytelna
+            top_cols_hm = corr_matrix_df.abs().mean().sort_values(ascending=False).head(18).index.tolist()
+            hm_sub = corr_matrix_df[top_cols_hm].copy()
+            hm_sub.columns = [
+                (METRIC_LABELS_MAP.get(c, (c, c))[0] if selected_lang == "PL" else METRIC_LABELS_MAP.get(c, (c, c))[1])
+                for c in hm_sub.columns
+            ]
+
+            fig_dna_hm = px.imshow(
+                hm_sub,
+                text_auto=".2f",
+                aspect="auto",
+                color_continuous_scale="RdYlGn",
+                zmin=-0.75,
+                zmax=0.75,
+                template="plotly_dark"
+            )
+            fig_dna_hm.update_layout(
+                height=max(520, len(hm_sub) * 28 + 140),
+                paper_bgcolor="#0E1117",
+                plot_bgcolor="#161B22",
+                title=dict(
+                    text="<b>Mapa Wrażliwości Klubów: Korelacja każdej statystyki ze zdobywanymi punktami</b>" if selected_lang == "PL" else "<b>Club Sensitivity Map: Metric Correlation with Points</b>",
+                    font=dict(size=14, color="#FFFFFF"), x=0.02
+                ),
+                xaxis=dict(tickangle=-40, tickfont=dict(size=10.5)),
+                yaxis=dict(tickfont=dict(size=11)),
+                margin=dict(l=150, r=30, t=55, b=140)
+            )
+            st.plotly_chart(fig_dna_hm, use_container_width=True, key="chart_dna_league_heatmap")
+    else:
+        st.info("Zbyt mało rozegranych spotkań na drużynę, aby wyznaczyć profile DNA.")
 
 # ZAKŁADKA: SZCZEGÓŁOWA ANALIZA MECZU (MATCH ANALYSIS)
 # =========================================================================
