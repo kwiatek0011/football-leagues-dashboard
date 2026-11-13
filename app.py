@@ -78,7 +78,6 @@ TRANSLATIONS = {
     "def_opt19": "Strzały rywali potrzebne na zdobycie bramki",
     "def_opt20": "xAGOT vs Bramki Stracone (Goals Prevented / Bramkarz)",
     "def_opt21": "15. Kontakty rywali w naszym polu karnym (Opponent Box Touches)"
-
     "pass_select" "Wybierz perspektywę analityczną:",
     "pass_opt1": "1. Tabela Zbiorcza Dystrybucji (Własne vs Przeciwko)",
     "pass_opt2": "2. Średnie Posiadanie Piłki (% Kontroli meczu)",
