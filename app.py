@@ -6405,7 +6405,7 @@ with tab_zaleznosci:
 
     # Regresja liniowa
     st.markdown("---")
-    st.subheader(f"📈 Linear Regression Model: {y_choice} vs {x_choice}" if selected_lang == "EN" else f"📈 Model Regresji Liniowej: {y_choice} względem {x_choice}")
+    st.subheader(f" Linear Regression Model: {y_choice} vs {x_choice}" if selected_lang == "EN" else f" Model Regresji Liniowej: {y_choice} względem {x_choice}")
 
     x_arr = val_x.to_numpy()
     y_arr = val_y.to_numpy()
