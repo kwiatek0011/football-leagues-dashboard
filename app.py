@@ -78,6 +78,7 @@ TRANSLATIONS = {
     "def_opt19": "Strzały rywali potrzebne na zdobycie bramki",
     "def_opt20": "xAGOT vs Bramki Stracone (Goals Prevented / Bramkarz)",
     "def_opt21": " Kontakty rywali w naszym polu karnym (Opponent Box Touches)",
+    "def_opt22": "Przyczyny traconych goli: Analiza 5 czynników (Bloki 5-drużynowe)",
 
     "pass_select": "Wybierz perspektywę analityczną:",
     "pass_opt1": "1. Tabela Zbiorcza Dystrybucji (Własne vs Przeciwko)",
@@ -167,7 +168,8 @@ TRANSLATIONS = {
     "def_opt18": "Box Control: Opponent Touches vs Opponent Shots",
     "def_opt19": "Opponent Shots Needed to Score",
     "def_opt20": "xAGOT vs Goals Conceded (Goalkeeper Goals Prevented)",
-    "def_opt21": "15. Opponent Touches in Our Box / 90",
+    "def_opt21": "Opponent Touches in Our Box / 90",
+    "def_opt22": "Goals Conceded Drivers: 5-Factor Analysis (5-Team Blocks)",
 
     "pass_select": "Select distribution perspective:",
     "pass_opt1": "1. Full Distribution Table (For vs Against)",
@@ -2219,7 +2221,7 @@ with tab_defensywa:
 
     defensywa_widok = st.selectbox(
         t("def_select"),
-        [t(f"def_opt{i}") for i in range(1, 22)],
+        [t(f"def_opt{i}") for i in range(1, 23)],
         key="sb_def_analytics_view"
     )
     st.markdown("---")
@@ -2522,6 +2524,251 @@ with tab_defensywa:
             metric_label="Kontakty rywali w naszym polu karnym" if selected_lang == "PL" else "Opponent Touches in Our Box",
             yaxis_title="Kontakty" if selected_lang == "PL" else "Touches"
         ) 
+
+    # 22. Przyczyny traconych goli: 5 czynników w podziale na 4 bloki po 5 drużyn
+    elif defensywa_widok == t("def_opt22"):
+        st.subheader(
+            " Co Powoduje Utratę Bramek? Analiza 5 Czynników w Blokach 5-Drużynowych"
+            if selected_lang == "PL" else
+            " What Drives Goals Conceded? 5-Factor Analysis in 5-Team Blocks"
+        )
+        st.caption(
+            "Badanie wpływu 5 metryk defensywnych (strzały ogólne, z pola karnego, zza pola karnego, kontakty w polu karnym, strzały celne) na liczbę traconych goli w poszczególnych drużynach oraz 4 blokach tabeli."
+            if selected_lang == "PL" else
+            "Evaluates the impact of 5 defensive metrics (total shots, box shots, outside box shots, box touches, shots on target) on goals conceded across teams and 4 table blocks."
+        )
+
+        DEF_5_FACTORS = [
+            ("Strzały ogólne rywala" if selected_lang == "PL" else "Total Shots Against", "Shots_Against", "#94A3B8"),
+            ("Strzały z pola karnego" if selected_lang == "PL" else "Box Shots Against", "Box_Shots_Against", "#F59E0B"),
+            ("Strzały zza pola karnego" if selected_lang == "PL" else "Outside Box Shots", "Outside_Box_Shots_Against", "#A855F7"),
+            ("Kontakty rywala w polu karnym" if selected_lang == "PL" else "Opp Box Touches", "Box_Touches_Against", "#38BDF8"),
+            ("Strzały celne rywala" if selected_lang == "PL" else "Shots on Target Against", "Shots_On_Target_Against", "#EF4444"),
+        ]
+
+        ordered_teams = def_team_stats["Team"].tolist()
+        factor_cols = [c for _, c, _ in DEF_5_FACTORS]
+        factor_labels = [l for l, _, _ in DEF_5_FACTORS]
+
+        # Wyznaczanie bloków 5-drużynowych (dla 20 drużyn Premier League = 4 równe bloki)
+        block_names_pl = {
+            1: "Blok 1 (Miejsca 1–5: Czołówka)",
+            2: "Blok 2 (Miejsca 6–10: Górna połowa)",
+            3: "Blok 3 (Miejsca 11–15: Środek tabeli)",
+            4: "Blok 4 (Miejsca 16–20: Walka o utrzymanie)",
+        }
+        block_names_en = {
+            1: "Block 1 (Ranks 1–5: Top Tier)",
+            2: "Block 2 (Ranks 6–10: Upper Mid)",
+            3: "Block 3 (Ranks 11–15: Lower Mid)",
+            4: "Block 4 (Ranks 16–20: Relegation Battle)",
+        }
+
+        team_rows = []
+        for idx_tm, tm in enumerate(ordered_teams, 1):
+            sub_tm = def_matches[def_matches["Team"] == tm].copy()
+            if len(sub_tm) < 3:
+                continue
+
+            y_ga = sub_tm["Goals_Against"].fillna(0.0).astype(float).to_numpy()
+            ga_per_m = float(y_ga.mean())
+
+            # 1. Korelacja liniowa Pearsona (r) dla każdego czynnika osobno
+            r_vals = {}
+            for lbl, col, _ in DEF_5_FACTORS:
+                x_s = sub_tm[col].fillna(0.0).astype(float)
+                if x_s.std() > 1e-9 and np.std(y_ga) > 1e-9:
+                    val_r = x_s.corr(sub_tm["Goals_Against"].astype(float))
+                    r_vals[lbl] = 0.0 if np.isnan(val_r) else float(val_r)
+                else:
+                    r_vals[lbl] = 0.0
+
+            # 2. Wielozmiennowa regresja Ridge (wpływ netto β przy wszystkich 5 zmiennych naraz)
+            X_raw = sub_tm[factor_cols].fillna(0.0).astype(float).to_numpy()
+            x_stds = X_raw.std(axis=0)
+            x_stds_safe = np.where(x_stds > 1e-9, x_stds, 1.0)
+            X_std = (X_raw - X_raw.mean(axis=0)) / x_stds_safe
+
+            if np.std(y_ga) > 1e-9:
+                alpha_r = max(3.0, len(sub_tm) * 0.25)
+                A_r = X_std.T @ X_std + alpha_r * np.eye(len(factor_cols))
+                betas = np.linalg.solve(A_r, X_std.T @ (y_ga - y_ga.mean()))
+            else:
+                betas = np.zeros(len(factor_cols))
+
+            # Wybór najsilniejszego czynnika wg korelacji r oraz wg wagi netto β
+            top_r_lbl = max(r_vals.items(), key=lambda kv: kv[1])[0]
+            top_r_val = r_vals[top_r_lbl]
+
+            beta_map = {lbl: float(b) for lbl, b in zip(factor_labels, betas)}
+            top_b_lbl = max(beta_map.items(), key=lambda kv: kv[1])[0]
+            top_b_val = beta_map[top_b_lbl]
+
+            blk_id = (idx_tm - 1) // 5 + 1
+            default_blk = f"Blok {blk_id} ({(blk_id - 1)*5 + 1}–{min(blk_id*5, len(ordered_teams))})"
+            blk_label = (block_names_pl if selected_lang == "PL" else block_names_en).get(blk_id, default_blk)
+
+            row_rec = {
+                "Poz": idx_tm,
+                "Blok_ID": blk_id,
+                "Blok": blk_label,
+                "Drużyna": tm,
+                "GA / mecz": round(ga_per_m, 2),
+                "Główny zapalnik (Korelacja r)": f"{top_r_lbl} ({top_r_val:+.2f})",
+                "Główny wpływ netto (Model β)": f"{top_b_lbl} ({top_b_val:+.2f})",
+            }
+            for lbl in factor_labels:
+                row_rec[f"r | {lbl}"] = round(r_vals[lbl], 2)
+                row_rec[f"β | {lbl}"] = round(beta_map[lbl], 3)
+
+            team_rows.append(row_rec)
+
+        if team_rows:
+            df_ga_drivers = pd.DataFrame(team_rows)
+
+            col_m1, col_m2 = st.columns([1.6, 1.4])
+            with col_m1:
+                metric_view_mode = st.radio(
+                    "Miara wpływu na wykresach i mapie:" if selected_lang == "PL" else "Impact metric on charts:",
+                    [
+                        "Korelacja indywidualna (r) — czysty związek z traconymi golami",
+                        "Wpływ netto w modelu 5 zmiennych (Ridge β) — po wyeliminowaniu nakładania się strzałów"
+                    ] if selected_lang == "PL" else [
+                        "Individual Correlation (r) — direct link with goals conceded",
+                        "Net Multivariate Effect (Ridge β) — controlling for overlap between shot types"
+                    ],
+                    index=0,
+                    key="radio_ga_5factors_metric"
+                )
+            with col_m2:
+                available_blocks = df_ga_drivers["Blok"].unique().tolist()
+                all_blocks_lbl = "Wszystkie 4 bloki (Cała liga)" if selected_lang == "PL" else "All 4 Blocks (Full League)"
+                selected_block_view = st.selectbox(
+                    "Wybierz blok 5-drużynowy do podglądu szczegółowego:" if selected_lang == "PL" else "Select 5-Team Block for detailed chart:",
+                    available_blocks + [all_blocks_lbl],
+                    index=0,
+                    key="sb_ga_5factors_block"
+                )
+
+            use_beta = ("Ridge" in metric_view_mode or "netto" in metric_view_mode)
+            prefix = "β | " if use_beta else "r | "
+
+            # --- WYKRES 1: SZCZEGÓŁOWY PODGLĄD WYBRANEGO BLOKU 5 DRUŻYN ---
+            if selected_block_view == all_blocks_lbl:
+                plot_sub = df_ga_drivers.copy()
+                chart_h = max(620, len(plot_sub) * 34)
+            else:
+                plot_sub = df_ga_drivers[df_ga_drivers["Blok"] == selected_block_view].copy()
+                chart_h = 440
+
+            fig_blk = go.Figure()
+            for lbl, _, hex_col in DEF_5_FACTORS:
+                col_metric_key = f"{prefix}{lbl}"
+                fig_blk.add_trace(go.Bar(
+                    name=lbl,
+                    x=plot_sub["Drużyna"],
+                    y=plot_sub[col_metric_key],
+                    marker_color=hex_col,
+                    text=[f"{v:+.2f}" for v in plot_sub[col_metric_key]],
+                    textposition="outside",
+                    textfont=dict(size=9.5, color="#E2E8F0")
+                ))
+
+            fig_blk.add_hline(y=0, line_color="#FFFFFF", line_width=1.2)
+            fig_blk.update_layout(
+                barmode="group",
+                height=chart_h,
+                template="plotly_dark",
+                paper_bgcolor="#0E1117",
+                plot_bgcolor="#161B22",
+                title=dict(
+                    text=f"<b>{selected_block_view} — Wpływ 5 czynników na tracone gole ({'β netto' if use_beta else 'korelacja r'})</b>",
+                    font=dict(size=14, color="#FFFFFF"), x=0.02
+                ),
+                xaxis=dict(tickangle=-15 if selected_block_view != all_blocks_lbl else -35),
+                yaxis=dict(
+                    title="Współczynnik β (wpływ netto)" if use_beta else "Korelacja liniowa r (-1 do +1)",
+                    gridcolor="#21262D"
+                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_blk, use_container_width=True, key="chart_ga_5factors_block_bars")
+
+            # --- WYKRES 2: PORÓWNANIE ŚREDNICH PROFILI MIĘDZY 4 BLOKAMI PO 5 DRUŻYN ---
+            st.markdown("---")
+            st.subheader(
+                " Porównanie 4 Bloków Tabeli (Średni wpływ każdego czynnika w bloku)"
+                if selected_lang == "PL" else
+                " Comparison Across the 4 Table Blocks (Block Averages)"
+            )
+            blk_agg = df_ga_drivers.groupby(["Blok_ID", "Blok"], as_index=False)[
+                ["GA / mecz"] + [f"{prefix}{lbl}" for lbl in factor_labels]
+            ].mean().sort_values("Blok_ID")
+
+            fig_blk_cmp = go.Figure()
+            for lbl, _, hex_col in DEF_5_FACTORS:
+                c_k = f"{prefix}{lbl}"
+                fig_blk_cmp.add_trace(go.Bar(
+                    name=lbl,
+                    x=blk_agg["Blok"],
+                    y=blk_agg[c_k],
+                    marker_color=hex_col,
+                    text=[f"{v:+.2f}" for v in blk_agg[c_k]],
+                    textposition="outside",
+                    textfont=dict(size=10, color="#FFFFFF")
+                ))
+
+            fig_blk_cmp.update_layout(
+                barmode="group",
+                height=420,
+                template="plotly_dark",
+                paper_bgcolor="#0E1117",
+                plot_bgcolor="#161B22",
+                yaxis=dict(title="Średnia wartość w bloku", gridcolor="#21262D"),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_blk_cmp, use_container_width=True, key="chart_ga_4blocks_comparison")
+
+            # --- WYKRES 3: MAPA CIEPLNA WSZYSTKICH 20 DRUŻYN NARAZ ---
+            st.markdown("---")
+            st.subheader(
+                " Mapa Cieplna Całej Ligi (Wszystkie drużyny × 5 czynników)"
+                if selected_lang == "PL" else
+                " Full League Heatmap (All Teams × 5 Factors)"
+            )
+            hm_cols = [f"{prefix}{lbl}" for lbl in factor_labels]
+            hm_df = df_ga_drivers.set_index("Drużyna")[hm_cols].copy()
+            hm_df.columns = factor_labels
+
+            fig_hm_ga = px.imshow(
+                hm_df,
+                text_auto=".2f",
+                aspect="auto",
+                color_continuous_scale="RdYlGn_r",
+                zmin=-0.6 if not use_beta else -0.35,
+                zmax=0.85 if not use_beta else 0.45,
+                template="plotly_dark"
+            )
+            fig_hm_ga.update_layout(
+                height=max(560, len(hm_df) * 28 + 120),
+                paper_bgcolor="#0E1117",
+                plot_bgcolor="#161B22",
+                margin=dict(l=150, r=30, t=30, b=100),
+                xaxis=dict(tickangle=-20)
+            )
+            st.plotly_chart(fig_hm_ga, use_container_width=True, key="chart_ga_5factors_heatmap")
+
+            # --- TABELA ZBIORCZA Z PODZIAŁEM NA BLOKI ---
+            st.markdown("---")
+            st.subheader(
+                " Tabela Zbiorcza: Główny Zapalnik Utraty Goli dla Każdej Drużyny"
+                if selected_lang == "PL" else
+                " Summary Table: Primary Goals Conceded Trigger per Team"
+            )
+            show_cols = ["Poz", "Blok", "Drużyna", "GA / mecz", "Główny zapalnik (Korelacja r)", "Główny wpływ netto (Model β)"] + [f"{prefix}{lbl}" for lbl in factor_labels]
+            st.dataframe(df_ga_drivers[show_cols], use_container_width=True, hide_index=True)
+        else:
+            st.info("Zbyt mało rozegranych spotkań, aby wyznaczyć profile utraty bramek.")
 
 # =========================================================================
 # TAB 4: DYSTRYBUCJA I PODANIA (Z OBSŁUGĄ FILTRA KOLEJEK)
