@@ -7130,105 +7130,173 @@ with tab_asystent_ai:
 
 
 # =========================================================================
-# TAB 6: PRACOWNIA ZALEŻNOŚCI (PL / EN)
+# =========================================================================
+# TAB 6: PRACOWNIA ZALEŻNOŚCI (LIGA ORAZ MECZ PO MECZU DLA WYBRANEGO KLUBU)
 # =========================================================================
 with tab_zaleznosci:
     st.header(" Correlation Lab: X vs Y Metrics" if selected_lang == "EN" else " Zależności: Wybierz osie X i Y")
-    st.caption("Investigate relationships and Pearson correlation coefficients across the league." if selected_lang == "EN" else "Wybierz metryki z bazy, aby sprawdzić ich relację oraz siłę korelacji w lidze.")
+    st.caption(
+        "Investigate relationships across the entire league or drill down into match-by-match correlations for a single club."
+        if selected_lang == "EN" else
+        "Sprawdź relacje między drużynami w całej lidze albo przełącz na pojedynczy klub, aby zbadać korelację mecz po meczu."
+    )
 
+    # Słownik metryk: "Nazwa": ("kolumna_w_team_stats", "kolumna_w_matches_df")
     if selected_lang == "EN":
         METRIC_DB = {
-            "Points in Table": "Punkty",
-            "Goals Scored (Avg / 90)": "Gole_na_mecz",
-            "Goals Conceded (Avg / 90)": "Gole_stracone_na_mecz",
-            "Goal Difference": "Bilans_Bramkowy",
-            "Created xG (Avg / 90)": "xG_na_mecz",
-            "Conceded xGA (Avg / 90)": "xGA_na_mecz",
-            "xG Difference (xG - xGA)": "Bilans_xG",
-            "Open Play xG (Avg / 90)": "xG_OP_na_mecz",
-            "Open Play xGA Conceded (Avg / 90)": "xGA_OP_na_mecz",
-            "Set-Play xG (Avg / 90)": "xG_SP_na_mecz",
-            "Set-Play xGA Conceded (Avg / 90)": "xGA_SP_na_mecz",
-            "Non-Penalty xG (Avg / 90)": "npxG_na_mecz",
-            "Non-Penalty xGA Conceded (Avg / 90)": "npxGA_na_mecz",
-            "Team xGOT on Target (Avg / 90)": "xGOT_na_mecz",
-            "Opponent xAGOT Conceded (Avg / 90)": "xAGOT_na_mecz",
-            "Total Shots (Avg / 90)": "Strzaly_na_mecz",
-            "Shots on Target (Avg / 90)": "Celne_strzaly",
-            "Shot Accuracy (%)": "Celnosc_strzalow_proc",
-            "Shots Inside Box (Avg / 90)": "Strzaly_z_pola_karnego",
-            "Shots Outside Box (Avg / 90)": "Strzaly_zza_pola_karnego",
-            "Ball Possession (%)": "Posiadanie",
-            "Opponent Box Touches (Avg / 90)": "Box_Touches_Mean",
-            "Opponent Touches in Our Box (Avg / 90)": "Box_Touches_Against_Mean",
-            "Total Team Passes (Avg / 90)": "Podania_ogolem",
-            "Opponent Total Passes (Avg / 90)": "Passes_Total_Against_Mean",
-            "Passes in Own Half (Avg / 90)": "Passes_Own_Half_Mean",
-            "Passes in Opponent Half (Avg / 90)": "Passes_Opp_Half_Mean",
-            "Accurate Long Balls (Avg / 90)": "Long_Balls_Mean",
-            "Goalkeeper Saves (Avg / 90)": "Keeper_Saves_Mean",
-            "Win Rate (%)": "Win_Rate",
-            "Total Matches Won": "Wygrane",
-            "Box Touches Conversion (Shots/Touch)": "Strzaly_z_pola_karnego", # lub nowa kolumna
-            "Long Ball Share (%)": "Udzial_dlugich_pilek_proc",
-            "Finishing Delta (Goals - xG)": "Gole_minus_xG",
-            "Pass Dominance Balance": "Bilans_Podan_Atak",
+            "Points in Table / Match": ("Punkty", "Points"),
+            "Goals Scored": ("Gole_na_mecz", "Goals_For"),
+            "Goals Conceded": ("Gole_stracone_na_mecz", "Goals_Against"),
+            "Goal Difference": ("Bilans_Bramkowy", "Bilans_Bramkowy_Match"),
+            "Created xG": ("xG_na_mecz", "xG_For"),
+            "Conceded xGA": ("xGA_na_mecz", "xG_Against"),
+            "xG Difference (xG - xGA)": ("Bilans_xG", "Bilans_xG_Match"),
+            "Open Play xG": ("xG_OP_na_mecz", "xG_OP_For"),
+            "Open Play xGA Conceded": ("xGA_OP_na_mecz", "xG_OP_Against"),
+            "Set-Play xG": ("xG_SP_na_mecz", "xG_SP_For"),
+            "Set-Play xGA Conceded": ("xGA_SP_na_mecz", "xG_SP_Against"),
+            "Non-Penalty xG": ("npxG_na_mecz", "npxG_For"),
+            "Non-Penalty xGA Conceded": ("npxGA_na_mecz", "npxG_Against"),
+            "Team xGOT on Target": ("xGOT_na_mecz", "xGOT_For"),
+            "Opponent xAGOT Conceded": ("xAGOT_na_mecz", "xGOT_Against"),
+            "Total Shots (Team)": ("Strzaly_na_mecz", "Shots"),
+            "Total Shots Conceded (Opponent)": ("Shots_Against_Mean", "Shots_Against"),
+            "Shots on Target (Team)": ("Celne_strzaly", "Shots_On_Target"),
+            "Shots on Target Conceded (Opponent)": ("Shots_On_Target_Against_Mean", "Shots_On_Target_Against"),
+            "Shots Inside Box (Team)": ("Strzaly_z_pola_karnego", "Box_Shots"),
+            "Opponent Shots Inside Box": ("Box_Shots_Against_Mean", "Box_Shots_Against"),
+            "Shots Outside Box (Team)": ("Strzaly_zza_pola_karnego", "Outside_Box_Shots"),
+            "Opponent Shots Outside Box": ("Outside_Box_Shots_Against_Mean", "Outside_Box_Shots_Against"),
+            "Opponent Box Touches (Team)": ("Box_Touches_Mean", "Box_Touches"),
+            "Opponent Touches in Our Box": ("Box_Touches_Against_Mean", "Box_Touches_Against"),
+            "Big Chances (Team)": ("Big_Chances", "Big_Chances"),
+            "Big Chances Conceded (Opponent)": ("Big_Chances_Against_Mean", "Big_Chances_Against"),
+            "Ball Possession (%)": ("Posiadanie", "Possession"),
+            "Total Team Passes": ("Podania_ogolem", "Passes_Total"),
+            "Opponent Total Passes": ("Passes_Total_Against_Mean", "Passes_Total_Against"),
+            "Passes in Own Half": ("Passes_Own_Half_Mean", "Passes_Own_Half"),
+            "Passes in Opponent Half": ("Passes_Opp_Half_Mean", "Passes_Opp_Half"),
+            "Accurate Long Balls": ("Long_Balls_Mean", "Long_Balls"),
+            "Goalkeeper Saves": ("Keeper_Saves_Mean", "Keeper_Saves"),
+            "Corners Won": ("Rzuty_Rozne", "Corners"),
+            "Corners Conceded": ("Corners_Against_Mean", "Corners_Against"),
+            "Duels Won": ("Pojedynki_Wygrane", "Duels_Won"),
+            "Fouls Committed": ("Fouls_Mean", "Fouls"),
         }
     else:
         METRIC_DB = {
-            "Punkty w tabeli": "Punkty",
-            "Gole Strzelone (Śr. / Mecz)": "Gole_na_mecz",
-            "Gole Stracone (Śr. / Mecz)": "Gole_stracone_na_mecz",
-            "Bilans Bramkowy": "Bilans_Bramkowy",
-            "xG Utworzone (Śr. / Mecz)": "xG_na_mecz",
-            "xG Dopuszczone / xGA (Śr. / Mecz)": "xGA_na_mecz",
-            "Bilans xG (xG - xGA)": "Bilans_xG",
-            "xG Open Play Utworzone (Śr. / Mecz)": "xG_OP_na_mecz",
-            "xG Open Play Dopuszczone (Śr. / Mecz)": "xGA_OP_na_mecz",
-            "xG Set-Play Utworzone (Śr. / Mecz)": "xG_SP_na_mecz",
-            "xG Set-Play Dopuszczone (Śr. / Mecz)": "xGA_SP_na_mecz",
-            "npxG Utworzone (Śr. / Mecz)": "npxG_na_mecz",
-            "npxG Dopuszczone (Śr. / Mecz)": "npxGA_na_mecz",
-            "xGOT Własne (Śr. / Mecz)": "xGOT_na_mecz",
-            "xGOT Dopuszczone / xAGOT (Śr. / Mecz)": "xAGOT_na_mecz",
-            "Strzały Ogółem (Śr. / Mecz)": "Strzaly_na_mecz",
-            "Strzały Celne (Śr. / Mecz)": "Celne_strzaly",
-            "Celność Strzałów (%)": "Celnosc_strzalow_proc",
-            "Strzały z pola karnego (Śr. / Mecz)": "Strzaly_z_pola_karnego",
-            "Strzały zza pola karnego (Śr. / Mecz)": "Strzaly_zza_pola_karnego",
-            "Posiadanie Piłki (%)": "Posiadanie",
-            "Kontakty w szesnastce rywala (Śr. / Mecz)": "Box_Touches_Mean",
-            "Kontakty rywala w naszym polu (Śr. / Mecz)": "Box_Touches_Against_Mean",
-            "Podania Ogółem Własne (Śr. / Mecz)": "Podania_ogolem",
-            "Podania Ogółem Rywala (Śr. / Mecz)": "Passes_Total_Against_Mean",
-            "Podania na Własnej Połowie (Śr. / Mecz)": "Passes_Own_Half_Mean",
-            "Podania na Połowie Rywala (Śr. / Mecz)": "Passes_Opp_Half_Mean",
-            "Celne Długie Piłki Własne (Śr. / Mecz)": "Long_Balls_Mean",
-            "Obrony Własnego Bramkarza (Śr. / Mecz)": "Keeper_Saves_Mean",
-            "% Wygranych Meczów (Win Rate)": "Win_Rate",
-            "Liczba Wygranych Spotkań": "Wygrane",
-            "Udział Długich Piłek (%)": "Udzial_dlugich_pilek_proc",
-            "Bilans Wykończenia (Gole - xG)": "Gole_minus_xG",
-            "Bilans Podań w Ataku": "Bilans_Podan_Atak",
+            "Punkty (Tabela / Mecz)": ("Punkty", "Points"),
+            "Gole Strzelone": ("Gole_na_mecz", "Goals_For"),
+            "Gole Stracone": ("Gole_stracone_na_mecz", "Goals_Against"),
+            "Bilans Bramkowy": ("Bilans_Bramkowy", "Bilans_Bramkowy_Match"),
+            "xG Utworzone": ("xG_na_mecz", "xG_For"),
+            "xG Dopuszczone (xGA)": ("xGA_na_mecz", "xG_Against"),
+            "Bilans xG (xG - xGA)": ("Bilans_xG", "Bilans_xG_Match"),
+            "xG Open Play Utworzone": ("xG_OP_na_mecz", "xG_OP_For"),
+            "xG Open Play Dopuszczone": ("xGA_OP_na_mecz", "xG_OP_Against"),
+            "xG Set-Play Utworzone": ("xG_SP_na_mecz", "xG_SP_For"),
+            "xG Set-Play Dopuszczone": ("xGA_SP_na_mecz", "xG_SP_Against"),
+            "npxG Utworzone": ("npxG_na_mecz", "npxG_For"),
+            "npxG Dopuszczone": ("npxGA_na_mecz", "npxG_Against"),
+            "xGOT Własne": ("xGOT_na_mecz", "xGOT_For"),
+            "xAGOT (Celne strzały rywala)": ("xAGOT_na_mecz", "xGOT_Against"),
+            "Strzały Ogółem (Własne)": ("Strzaly_na_mecz", "Shots"),
+            "Strzały Ogółem Rywala": ("Shots_Against_Mean", "Shots_Against"),
+            "Strzały Celne (Własne)": ("Celne_strzaly", "Shots_On_Target"),
+            "Strzały Celne Rywala": ("Shots_On_Target_Against_Mean", "Shots_On_Target_Against"),
+            "Strzały z pola karnego (Własne)": ("Strzaly_z_pola_karnego", "Box_Shots"),
+            "Strzały rywala z pola karnego": ("Box_Shots_Against_Mean", "Box_Shots_Against"),
+            "Strzały zza pola karnego (Własne)": ("Strzaly_zza_pola_karnego", "Outside_Box_Shots"),
+            "Strzały rywala zza pola karnego": ("Outside_Box_Shots_Against_Mean", "Outside_Box_Shots_Against"),
+            "Kontakty w szesnastce rywala": ("Box_Touches_Mean", "Box_Touches"),
+            "Kontakty rywala w naszym polu": ("Box_Touches_Against_Mean", "Box_Touches_Against"),
+            "Wielkie Szanse (Własne)": ("Big_Chances", "Big_Chances"),
+            "Wielkie Szanse Rywala": ("Big_Chances_Against_Mean", "Big_Chances_Against"),
+            "Posiadanie Piłki (%)": ("Posiadanie", "Possession"),
+            "Podania Ogółem (Własne)": ("Podania_ogolem", "Passes_Total"),
+            "Podania Ogółem Rywala": ("Passes_Total_Against_Mean", "Passes_Total_Against"),
+            "Podania na Własnej Połowie": ("Passes_Own_Half_Mean", "Passes_Own_Half"),
+            "Podania na Połowie Rywala": ("Passes_Opp_Half_Mean", "Passes_Opp_Half"),
+            "Celne Długie Piłki": ("Long_Balls_Mean", "Long_Balls"),
+            "Obrony Własnego Bramkarza": ("Keeper_Saves_Mean", "Keeper_Saves"),
+            "Rzuty Rożne (Własne)": ("Rzuty_Rozne", "Corners"),
+            "Rzuty Rożne Rywala": ("Corners_Against_Mean", "Corners_Against"),
+            "Wygrane Pojedynki": ("Pojedynki_Wygrane", "Duels_Won"),
+            "Faule Popełnione": ("Fouls_Mean", "Fouls"),
         }
 
     metric_options = list(METRIC_DB.keys())
+    default_x_idx = metric_options.index("Strzały rywala z pola karnego") if "Strzały rywala z pola karnego" in metric_options else 0
+    default_y_idx = metric_options.index("Gole Stracone") if "Gole Stracone" in metric_options else 0
+
     col_x, col_y, col_team = st.columns([1.2, 1.2, 1.2])
 
     with col_x:
-        x_choice = st.selectbox("Select X Axis (Horizontal):" if selected_lang == "EN" else "Wybierz oś X (pozioma):", metric_options, index=4 if len(metric_options) > 4 else 0, key="sb_custom_x")
+        x_choice = st.selectbox(
+            "Select X Axis (Horizontal):" if selected_lang == "EN" else "Wybierz oś X (pozioma):",
+            metric_options, index=default_x_idx, key="sb_custom_x"
+        )
     with col_y:
-        y_choice = st.selectbox("Select Y Axis (Vertical):" if selected_lang == "EN" else "Wybierz oś Y (pionowa):", metric_options, index=0, key="sb_custom_y")
+        y_choice = st.selectbox(
+            "Select Y Axis (Vertical):" if selected_lang == "EN" else "Wybierz oś Y (pionowa):",
+            metric_options, index=default_y_idx, key="sb_custom_y"
+        )
     with col_team:
         team_opts = ["All (League)" if selected_lang == "EN" else "Wszystkie (Liga)"] + sorted(team_stats["Team"].unique().tolist())
-        selected_team_zal = st.selectbox("Highlight Team:" if selected_lang == "EN" else "Podświetl drużynę:", team_opts, index=0, key="sb_custom_team")
+        selected_team_zal = st.selectbox(
+            "Scope / Team:" if selected_lang == "EN" else "Zakres / Wybierz drużynę:",
+            team_opts, index=0, key="sb_custom_team"
+        )
 
-    col_x_name = METRIC_DB[x_choice]
-    col_y_name = METRIC_DB[y_choice]
+    is_single_team_mode = (selected_team_zal not in ["All (League)", "Wszystkie (Liga)"])
+    club_scope_mode = "match_by_match"
 
-    val_x = team_stats[col_x_name]
-    val_y = team_stats[col_y_name]
-    corr_val = val_x.corr(val_y)
+    if is_single_team_mode:
+        scope_radio_opts = [
+            f"Mecze klubu {selected_team_zal} (Korelacja r mecz po meczu)",
+            f"Podświetl {selected_team_zal} na tle całej ligi"
+        ] if selected_lang == "PL" else [
+            f"{selected_team_zal} Fixtures (Match-by-match r)",
+            f"Highlight {selected_team_zal} within League"
+        ]
+        chosen_club_view = st.radio(
+            "Tryb badania wybranej drużyny:" if selected_lang == "PL" else "Selected Club Mode:",
+            scope_radio_opts,
+            horizontal=True,
+            key="radio_zal_single_club_mode"
+        )
+        club_scope_mode = "match_by_match" if chosen_club_view == scope_radio_opts[0] else "highlight_league"
+
+    col_x_team, col_x_match = METRIC_DB[x_choice]
+    col_y_team, col_y_match = METRIC_DB[y_choice]
+
+    # Wybór źródła punktów: mecze konkretnego klubu vs średnie wszystkich klubów w lidze
+    if is_single_team_mode and club_scope_mode == "match_by_match":
+        active_df = matches_df[matches_df["Team"] == selected_team_zal].copy().reset_index(drop=True)
+        active_df["Bilans_Bramkowy_Match"] = active_df["Goals_For"] - active_df["Goals_Against"]
+        active_df["Bilans_xG_Match"] = (active_df["xG_For"] - active_df["xG_Against"]).round(2)
+        active_df["Point_Label"] = active_df.apply(
+            lambda r: f"K{int(r['Kolejka'])}: vs {r['Opponent']} ({'D' if r['Venue'] == 'Home' else 'W'}) [{int(r['Goals_For'])}:{int(r['Goals_Against'])}]",
+            axis=1
+        )
+        col_x_name = col_x_match
+        col_y_name = col_y_match
+        scope_title_tag = f"{selected_team_zal} ({len(active_df)} meczów)" if selected_lang == "PL" else f"{selected_team_zal} ({len(active_df)} matches)"
+        avg_x_lbl = f"Średnia {selected_team_zal} (X)" if selected_lang == "PL" else f"{selected_team_zal} Avg (X)"
+        avg_y_lbl = f"Średnia {selected_team_zal} (Y)" if selected_lang == "PL" else f"{selected_team_zal} Avg (Y)"
+    else:
+        active_df = team_stats.copy()
+        active_df["Point_Label"] = active_df["Team"]
+        col_x_name = col_x_team
+        col_y_name = col_y_team
+        scope_title_tag = "Cała Liga" if selected_lang == "PL" else "Full League"
+        avg_x_lbl = f"Średnia ligowa (X): {x_choice.split('(')[0]}" if selected_lang == "PL" else f"League Avg (X): {x_choice.split('(')[0]}"
+        avg_y_lbl = f"Średnia ligowa (Y): {y_choice.split('(')[0]}" if selected_lang == "PL" else f"League Avg (Y): {y_choice.split('(')[0]}"
+
+    val_x = active_df[col_x_name].astype(float)
+    val_y = active_df[col_y_name].astype(float)
+    raw_corr = val_x.corr(val_y) if (val_x.std() > 1e-9 and val_y.std() > 1e-9) else 0.0
+    corr_val = 0.0 if pd.isna(raw_corr) else float(raw_corr)
 
     r_abs = abs(corr_val)
     if r_abs >= 0.7:
@@ -7240,45 +7308,54 @@ with tab_zaleznosci:
 
     st.markdown("---")
     kpi1, kpi2, kpi3 = st.columns(3)
-    kpi1.metric("Correlation coefficient (r)" if selected_lang == "EN" else "Współczynnik korelacji (r)", f"{corr_val:+.2f}", strength)
-    kpi2.metric(f"League Avg (X): {x_choice.split('(')[0]}" if selected_lang == "EN" else f"Średnia ligowa (X): {x_choice.split('(')[0]}", f"{val_x.mean():.2f}")
-    kpi3.metric(f"League Avg (Y): {y_choice.split('(')[0]}" if selected_lang == "EN" else f"Średnia ligowa (Y): {y_choice.split('(')[0]}", f"{val_y.mean():.2f}")
+    kpi1.metric(
+        f"Correlation (r) — {scope_title_tag}" if selected_lang == "EN" else f"Współczynnik korelacji (r) — {scope_title_tag}",
+        f"{corr_val:+.2f}", strength
+    )
+    kpi2.metric(avg_x_lbl, f"{val_x.mean():.2f}")
+    kpi3.metric(avg_y_lbl, f"{val_y.mean():.2f}")
 
     fig_scatter = go.Figure()
     fig_scatter.add_vline(x=val_x.mean(), line_dash="dash", line_color="#475569", line_width=1.2)
     fig_scatter.add_hline(y=val_y.mean(), line_dash="dash", line_color="#475569", line_width=1.2)
 
-    for _, row in team_stats.iterrows():
-        t_name = row["Team"]
-        x_pt = row[col_x_name]
-        y_pt = row[col_y_name]
-        is_sel = (selected_team_zal not in ["All (League)", "Wszystkie (Liga)"] and t_name == selected_team_zal)
+    for _, row in active_df.iterrows():
+        pt_label = row["Point_Label"]
+        x_pt = float(row[col_x_name])
+        y_pt = float(row[col_y_name])
 
-        if selected_team_zal in ["All (League)", "Wszystkie (Liga)"]:
-            color = "#38BDF8"
-            size = 12
-        else:
+        if is_single_team_mode and club_scope_mode == "match_by_match":
+            pts_m = row.get("Points", 1)
+            color = "#10B981" if pts_m == 3 else ("#EF4444" if pts_m == 0 else "#38BDF8")
+            size = 13
+            is_sel = True
+        elif is_single_team_mode and club_scope_mode == "highlight_league":
+            is_sel = (row["Team"] == selected_team_zal)
             color = "#EF4444" if is_sel else "#475569"
             size = 18 if is_sel else 9
+        else:
+            color = "#38BDF8"
+            size = 12
+            is_sel = False
 
         fig_scatter.add_trace(go.Scatter(
             x=[x_pt], y=[y_pt],
             mode="markers+text",
-            text=[t_name],
+            text=[pt_label],
             textposition="top center",
-            textfont=dict(size=11 if is_sel else 9.5, color="#FFFFFF" if is_sel else "#CBD5E1"),
+            textfont=dict(size=10.5 if is_sel else 9.5, color="#FFFFFF" if is_sel else "#CBD5E1"),
             marker=dict(size=size, color=color, line=dict(width=1.2, color="#0F172A")),
-            hovertemplate=f"<b>{t_name}</b><br>{x_choice}: <b>%{{x:.2f}}</b><br>{y_choice}: <b>%{{y:.2f}}</b><extra></extra>",
+            hovertemplate=f"<b>{pt_label}</b><br>{x_choice}: <b>%{{x:.2f}}</b><br>{y_choice}: <b>%{{y:.2f}}</b><extra></extra>",
             showlegend=False
         ))
 
-    margin_x = (val_x.max() - val_x.min()) * 0.15 if val_x.max() != val_x.min() else 0.2
-    margin_y = (val_y.max() - val_y.min()) * 0.15 if val_y.max() != val_y.min() else 0.2
+    margin_x = (val_x.max() - val_x.min()) * 0.15 if val_x.max() != val_x.min() else 0.5
+    margin_y = (val_y.max() - val_y.min()) * 0.15 if val_y.max() != val_y.min() else 0.5
 
     fig_scatter.update_layout(
         height=620, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22",
         title=dict(
-            text=f"<b>Relationship: {x_choice} vs {y_choice} (r = {corr_val:+.2f})</b>" if selected_lang == "EN" else f"<b>Zależność: {x_choice} vs {y_choice} (r = {corr_val:+.2f})</b>",
+            text=f"<b>[{scope_title_tag}] {x_choice} vs {y_choice} (r = {corr_val:+.2f})</b>",
             font=dict(size=16, color="#FFFFFF"), x=0.03, y=0.96
         ),
         xaxis=dict(title=f"<b>{x_choice}</b>", range=[val_x.min() - margin_x, val_x.max() + margin_x], showgrid=True, gridcolor="#21262D"),
@@ -7289,7 +7366,11 @@ with tab_zaleznosci:
 
     # Regresja liniowa
     st.markdown("---")
-    st.subheader(f" Linear Regression Model: {y_choice} vs {x_choice}" if selected_lang == "EN" else f" Model Regresji Liniowej: {y_choice} względem {x_choice}")
+    st.subheader(
+        f" Linear Regression Model [{scope_title_tag}]: {y_choice} vs {x_choice}"
+        if selected_lang == "EN" else
+        f" Model Regresji Liniowej [{scope_title_tag}]: {y_choice} względem {x_choice}"
+    )
 
     x_arr = val_x.to_numpy()
     y_arr = val_y.to_numpy()
@@ -7309,34 +7390,48 @@ with tab_zaleznosci:
         x_trend = np.linspace(val_x.min() - margin_x * 0.5, val_x.max() + margin_x * 0.5, 50)
         y_trend = a_slope * x_trend + b_intercept
 
-        fig_reg.add_trace(go.Scatter(x=x_trend, y=y_trend, mode="lines", name="Trendline (OLS)" if selected_lang == "EN" else "Linia trendu (OLS)", line=dict(color="#F59E0B", width=2.5, dash="dash"), hoverinfo="skip"))
+        fig_reg.add_trace(go.Scatter(
+            x=x_trend, y=y_trend, mode="lines",
+            name="Trendline (OLS)" if selected_lang == "EN" else "Linia trendu (OLS)",
+            line=dict(color="#F59E0B", width=2.5, dash="dash"), hoverinfo="skip"
+        ))
 
-        for _, row in team_stats.iterrows():
-            t_name = row["Team"]
-            x_pt = row[col_x_name]
-            y_pt = row[col_y_name]
+        for _, row in active_df.iterrows():
+            pt_label = row["Point_Label"]
+            x_pt = float(row[col_x_name])
+            y_pt = float(row[col_y_name])
             expected_y = a_slope * x_pt + b_intercept
             diff_y = y_pt - expected_y
-            is_sel = (selected_team_zal not in ["All (League)", "Wszystkie (Liga)"] and t_name == selected_team_zal)
 
-            if selected_team_zal in ["All (League)", "Wszystkie (Liga)"]:
-                pt_color = "#10B981" if diff_y >= 0 else "#EF4444"
-                pt_size = 11
-            else:
+            if is_single_team_mode and club_scope_mode == "highlight_league":
+                is_sel = (row["Team"] == selected_team_zal)
                 pt_color = "#38BDF8" if is_sel else "#475569"
                 pt_size = 18 if is_sel else 9
+            else:
+                pt_color = "#10B981" if diff_y >= 0 else "#EF4444"
+                pt_size = 11
+                is_sel = (is_single_team_mode and club_scope_mode == "match_by_match")
 
             fig_reg.add_trace(go.Scatter(
-                x=[x_pt], y=[y_pt], mode="markers+text", text=[t_name], textposition="top center",
-                textfont=dict(size=11 if is_sel else 9.5, color="#FFFFFF" if is_sel else "#CBD5E1"),
+                x=[x_pt], y=[y_pt], mode="markers+text", text=[pt_label], textposition="top center",
+                textfont=dict(size=10.5 if is_sel else 9.5, color="#FFFFFF" if is_sel else "#CBD5E1"),
                 marker=dict(size=pt_size, color=pt_color, line=dict(width=1.2, color="#0F172A")),
-                hovertemplate=f"<b>{t_name}</b><br>{x_choice}: <b>{x_pt:.2f}</b><br>{y_choice}: <b>{y_pt:.2f}</b><br>Expected: <b>{expected_y:.2f}</b><br>Residual: <b>{diff_y:+.2f}</b><extra></extra>" if selected_lang == "EN" else f"<b>{t_name}</b><br>{x_choice}: <b>{x_pt:.2f}</b><br>{y_choice}: <b>{y_pt:.2f}</b><br>Oczekiwana: <b>{expected_y:.2f}</b><br>Odchylenie: <b>{diff_y:+.2f}</b><extra></extra>",
+                hovertemplate=(
+                    f"<b>{pt_label}</b><br>{x_choice}: <b>{x_pt:.2f}</b><br>{y_choice}: <b>{y_pt:.2f}</b><br>Expected: <b>{expected_y:.2f}</b><br>Residual: <b>{diff_y:+.2f}</b><extra></extra>"
+                    if selected_lang == "EN" else
+                    f"<b>{pt_label}</b><br>{x_choice}: <b>{x_pt:.2f}</b><br>{y_choice}: <b>{y_pt:.2f}</b><br>Oczekiwana: <b>{expected_y:.2f}</b><br>Odchylenie: <b>{diff_y:+.2f}</b><extra></extra>"
+                ),
                 showlegend=False
             ))
 
         fig_reg.update_layout(
             height=560, template="plotly_dark", paper_bgcolor="#0E1117", plot_bgcolor="#161B22",
-            title=dict(text=f"<b>Regression Fit (R² = {r2_score:.2f}) | Green = Above Model, Red = Below Model</b>" if selected_lang == "EN" else f"<b>Dopasowanie regresyjne: R² = {r2_score:.2f} | Zielone = Nadwyżka ponad model, Czerwone = Wynik poniżej modelu</b>", font=dict(size=14, color="#FFFFFF"), x=0.03, y=0.96),
+            title=dict(
+                text=f"<b>[{scope_title_tag}] Regression Fit (R² = {r2_score:.2f}) | Green = Above Model, Red = Below Model</b>"
+                if selected_lang == "EN" else
+                f"<b>[{scope_title_tag}] Dopasowanie regresyjne: R² = {r2_score:.2f} | Zielone = Nadwyżka ponad model, Czerwone = Wynik poniżej modelu</b>",
+                font=dict(size=14, color="#FFFFFF"), x=0.03, y=0.96
+            ),
             xaxis=dict(title=f"<b>{x_choice}</b>", showgrid=True, gridcolor="#21262D"),
             yaxis=dict(title=f"<b>{y_choice}</b>", showgrid=True, gridcolor="#21262D"),
             margin=dict(l=60, r=40, t=55, b=50)
