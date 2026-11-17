@@ -200,7 +200,8 @@ st.set_page_config(page_title="Ekstraklasa Team Analytics", layout="wide")
 def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
     df = pd.read_excel(file_path)
     df.columns = [str(c).strip() for c in df.columns]
-    m_per_round = 10 if any(k in file_path for k in ["Premier", "La Liga", "Serie A"]) else 9
+    unique_teams = pd.unique(pd.concat([df["home_team"], df["away_team"]], ignore_index=True).dropna())
+    m_per_round = max(1, len(unique_teams) // 2)  # 10 dla lig 20-zespołowych, 9 dla 18-zespołowych
     
     def get_col(row, *candidates):
         for c in candidates:
@@ -441,6 +442,8 @@ def load_and_process_team_data(file_path="Ekstraklasa 2026-2027.xlsx"):
             "Duels_Total": duels_tot_a, "Duels_Total_Against": duels_tot_h,
         })
         
+    
+    
     matches_df = pd.DataFrame(records)
     
     team_stats = matches_df.groupby("Team").agg(
@@ -1360,6 +1363,7 @@ LEAGUES_CONFIG = {
     },
     "La Liga": {
         "file": "La Liga 26-27.xlsx",
+        "matches_per_round": 10,
         "title": "La Liga - Zaawansowany Panel Analityczny"
     },
     "Serie A": {
@@ -2551,17 +2555,19 @@ with tab_defensywa:
         factor_labels = [l for l, _, _ in DEF_5_FACTORS]
 
         # Wyznaczanie bloków 5-drużynowych (dla 20 drużyn Premier League = 4 równe bloki)
+        n_total_teams = len(ordered_teams)
+        last_rank_end = min(20, n_total_teams)
         block_names_pl = {
             1: "Blok 1 (Miejsca 1–5: Czołówka)",
             2: "Blok 2 (Miejsca 6–10: Górna połowa)",
             3: "Blok 3 (Miejsca 11–15: Środek tabeli)",
-            4: "Blok 4 (Miejsca 16–20: Walka o utrzymanie)",
+            4: f"Blok 4 (Miejsca 16–{last_rank_end}: Walka o utrzymanie)",
         }
         block_names_en = {
             1: "Block 1 (Ranks 1–5: Top Tier)",
             2: "Block 2 (Ranks 6–10: Upper Mid)",
             3: "Block 3 (Ranks 11–15: Lower Mid)",
-            4: "Block 4 (Ranks 16–20: Relegation Battle)",
+            4: f"Block 4 (Ranks 16–{last_rank_end}: Relegation Battle)",
         }
 
         team_rows = []
